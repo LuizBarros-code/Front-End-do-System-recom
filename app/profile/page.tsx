@@ -249,7 +249,7 @@ export default function Profile() {
 
       <div className="mt-6 flex justify-end">
         <Button
-          onClick={() => router.push(userType === "STUDENT" ? "/admin" : "/dashboard")}
+          onClick={() => router.push(userType === "STUDENT" ? "/student" : "/dashboard")}
           className="w-full sm:w-auto"
         >
           Voltar ao {userType === "STUDENT" ? "Painel do Estudante" : "Dashboard"}

@@ -1,5 +1,7 @@
 "use client"
 
+import type React from "react"
+
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -17,9 +19,10 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { AlertCircle, Loader2 } from "lucide-react"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3456"
 
@@ -37,50 +40,85 @@ export default function SettingsPage() {
   const [currentFileUrl, setCurrentFileUrl] = useState<string | null>(null)
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [userId, setUserId] = useState<number | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [isInitializing, setIsInitializing] = useState(true)
 
   useEffect(() => {
-    const type = localStorage.getItem("userType") as UserType
-    const email = localStorage.getItem("userEmail")
-    if (!type || !email) {
-      router.push("/login")
-      return
-    }
-    setUserType(type)
-    setUserEmail(email)
-    setReturnPath(type === "STUDENT" ? "/admin" : "/dashboard")
-
-    // Fetch user data including the current file URL and user ID
-    const fetchUserData = async () => {
+    const initializeSettings = async () => {
       try {
-        const response = await fetch(`${API_URL}/pessoaFisicas/email/${email}`)
-        if (!response.ok) {
-          const errorText = await response.text()
-          console.error("Fetch user data error:", errorText)
-          throw new Error(`HTTP error! status: ${response.status}. Details: ${errorText}`)
+        setIsInitializing(true)
+
+        // Verificar tipo de usuário
+        const type = localStorage.getItem("userType") as UserType
+        if (!type) {
+          throw new Error("Tipo de usuário não encontrado")
         }
-        const contentType = response.headers.get("content-type")
-        if (!contentType || !contentType.includes("application/json")) {
-          throw new TypeError("Oops, we haven't got JSON!")
+        setUserType(type)
+
+        // Definir caminho de retorno com base no tipo de usuário
+        setReturnPath(type === "STUDENT" ? "/student" : "/dashboard")
+
+        // Obter email ou matrícula com base no tipo de usuário
+        let email: string | null = null
+
+        if (type === "STUDENT") {
+          const matricula = localStorage.getItem("userMatricula")
+          if (!matricula) {
+            throw new Error("Matrícula não encontrada")
+          }
+
+          // Buscar dados do estudante para obter o email
+          const studentResponse = await fetch(`${API_URL}/alunos/matricula/${matricula}`)
+          if (!studentResponse.ok) {
+            throw new Error("Falha ao buscar dados do estudante")
+          }
+
+          const studentData = await studentResponse.json()
+          email = studentData.email
+          setUserId(studentData.id)
+        } else {
+          email = localStorage.getItem("userEmail")
+          if (!email) {
+            throw new Error("Email não encontrado")
+          }
+
+          // Buscar dados do usuário
+          const endpoint = type === "PHYSICAL" ? "pessoasFisicas" : "pessoasJuridicas"
+          const userResponse = await fetch(`${API_URL}/${endpoint}/email/${email}`)
+
+          if (!userResponse.ok) {
+            throw new Error(`Falha ao buscar dados do usuário: ${userResponse.statusText}`)
+          }
+
+          const userData = await userResponse.json()
+          setUserId(userData.id)
+
+          if (type === "PHYSICAL") {
+            setCurrentFileUrl(userData.comprovanteDeBaixaRenda)
+          } else if (type === "LEGAL") {
+            setProjectDescription(userData.comprovanteDeProjeto || "")
+          }
         }
-        const userData = await response.json()
-        setCurrentFileUrl(userData.comprovanteDeBaixaRendaAttachment)
-        setUserId(userData.id)
+
+        setUserEmail(email)
+        console.log("Inicialização concluída com sucesso:", { type, email, userId: userId })
       } catch (error) {
-        console.error("Error fetching user data:", error)
-        toast({
-          variant: "destructive",
-          title: "Erro ao carregar dados",
-          description: "Não foi possível carregar seus dados. Por favor, tente novamente mais tarde.",
-        })
+        console.error("Erro na inicialização:", error)
+        setError(error instanceof Error ? error.message : "Erro ao carregar configurações")
+
+        // Não redirecionar automaticamente para login, apenas mostrar o erro
+      } finally {
+        setIsInitializing(false)
       }
     }
 
-    fetchUserData()
-  }, [router, toast, API_URL])
+    initializeSettings()
+  }, [])
 
   const handlePasswordChange = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setIsLoading(true)
+    setError(null)
 
     try {
       const formData = new FormData(e.currentTarget)
@@ -95,7 +133,16 @@ export default function SettingsPage() {
         throw new Error("ID do usuário não encontrado")
       }
 
-      const response = await fetch(`${API_URL}/pessoaFisicas/${userId}`, {
+      let endpoint = ""
+      if (userType === "STUDENT") {
+        endpoint = `${API_URL}/alunos/${userId}`
+      } else if (userType === "PHYSICAL") {
+        endpoint = `${API_URL}/pessoasFisicas/${userId}`
+      } else if (userType === "LEGAL") {
+        endpoint = `${API_URL}/pessoasJuridicas/${userId}`
+      }
+
+      const response = await fetch(endpoint, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -104,15 +151,8 @@ export default function SettingsPage() {
       })
 
       if (!response.ok) {
-        throw new Error("Erro ao alterar a senha")
+        throw new Error(`Erro ao alterar a senha: ${response.statusText}`)
       }
-
-      const contentType = response.headers.get("content-type")
-      if (!contentType || !contentType.includes("application/json")) {
-        throw new TypeError("Oops, we haven't got JSON!")
-      }
-
-      await response.json() // Ensure we can parse the response as JSON
 
       toast({
         title: "Senha alterada com sucesso",
@@ -123,11 +163,7 @@ export default function SettingsPage() {
       e.currentTarget.reset()
     } catch (error) {
       console.error("Error changing password:", error)
-      toast({
-        variant: "destructive",
-        title: "Erro ao alterar senha",
-        description: error instanceof Error ? error.message : "Ocorreu um erro ao alterar a senha",
-      })
+      setError(error instanceof Error ? error.message : "Ocorreu um erro ao alterar a senha")
     } finally {
       setIsLoading(false)
     }
@@ -147,6 +183,7 @@ export default function SettingsPage() {
   const handleDocumentUpdate = async () => {
     setIsLoading(true)
     setIsAlertOpen(false)
+    setError(null)
 
     try {
       if (!userId) {
@@ -180,11 +217,6 @@ export default function SettingsPage() {
           throw new Error(`Erro no servidor: ${uploadResponse.statusText}. Details: ${errorText}`)
         }
 
-        const contentType = uploadResponse.headers.get("content-type")
-        if (!contentType || !contentType.includes("application/json")) {
-          throw new TypeError("Resposta inesperada do servidor: não é JSON")
-        }
-
         const responseData = await uploadResponse.json()
         console.log("Full server response:", responseData)
 
@@ -196,10 +228,7 @@ export default function SettingsPage() {
         console.log(`Arquivo ${isUpdate ? "atualizado" : "enviado"} com sucesso. URL:`, fileUrl)
 
         console.log("Atualizando registro do usuário...")
-        console.log("Payload para atualização:", {
-          comprovanteDeBaixaRenda: fileUrl,
-        })
-        const updateResponse = await fetch(`${API_URL}/pessoaFisicas/${userId}`, {
+        const updateResponse = await fetch(`${API_URL}/pessoasFisicas/${userId}`, {
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
@@ -213,11 +242,6 @@ export default function SettingsPage() {
           const errorText = await updateResponse.text()
           console.error("Update response error:", errorText)
           throw new Error(`Erro ao atualizar registro do usuário: ${updateResponse.statusText}. Details: ${errorText}`)
-        }
-
-        const updateContentType = updateResponse.headers.get("content-type")
-        if (!updateContentType || !updateContentType.includes("application/json")) {
-          throw new TypeError("Resposta inesperada do servidor de atualização: não é JSON")
         }
 
         const updateData = await updateResponse.json()
@@ -243,19 +267,12 @@ export default function SettingsPage() {
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ comprovanteProjeto: projectDescription }),
+          body: JSON.stringify({ comprovanteDeProjeto: projectDescription }),
         })
 
         if (!response.ok) {
           throw new Error("Erro ao atualizar descrição do projeto")
         }
-
-        const contentType = response.headers.get("content-type")
-        if (!contentType || !contentType.includes("application/json")) {
-          throw new TypeError("Oops, we haven't got JSON!")
-        }
-
-        await response.json() // Ensure we can parse the response as JSON
 
         toast({
           title: "Projeto atualizado com sucesso",
@@ -266,176 +283,233 @@ export default function SettingsPage() {
       }
     } catch (error) {
       console.error("Erro detalhado:", error)
-      toast({
-        variant: "destructive",
-        title: "Erro ao atualizar",
-        description:
-          error instanceof Error
-            ? `${error.message}. Por favor, tente novamente ou contate o suporte.`
-            : "Ocorreu um erro ao atualizar as informações. Por favor, tente novamente mais tarde.",
-      })
+      setError(error instanceof Error ? error.message : "Ocorreu um erro ao atualizar as informações")
     } finally {
       setIsLoading(false)
     }
   }
 
-  if (!userType) {
+  if (isInitializing) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p>Carregando...</p>
+      <div className="min-h-screen bg-[#141922] flex items-center justify-center">
+        <div className="text-white text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#84e100] mx-auto mb-4"></div>
+          <p>Carregando configurações...</p>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="container mx-auto py-8 space-y-8">
-      <div className="flex items-center justify-between mb-8">
-        <h1 className="text-3xl font-bold">Configurações</h1>
-        <div>
-          <p className="text-sm text-gray-600">Email: {userEmail}</p>
-          <Button onClick={() => router.push(returnPath)}>Voltar ao Dashboard</Button>
+    <div className="min-h-screen bg-[#141922] text-white">
+      <div className="container mx-auto py-8 space-y-8">
+        <div className="flex items-center justify-between mb-8">
+          <h1 className="text-3xl font-bold text-[#84e100]">Configurações</h1>
+          <div>
+            <p className="text-sm text-gray-400">Email: {userEmail}</p>
+            <Button
+              onClick={() => router.push(returnPath)}
+              className="bg-[#84e100] hover:bg-[#9aff00] text-[#141922] font-medium mt-2"
+            >
+              Voltar ao Dashboard
+            </Button>
+          </div>
         </div>
-      </div>
 
-      <Tabs defaultValue="password" className="space-y-6">
-        <TabsList>
-          <TabsTrigger value="password">Alterar Senha</TabsTrigger>
-          {userType !== "STUDENT" && (
-            <TabsTrigger value="document">
-              {userType === "PHYSICAL" ? "Alterar Documento" : "Alterar Projeto"}
+        {error && (
+          <Alert variant="destructive" className="mb-4 bg-red-900/20 border-red-900 text-red-300">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        <Tabs defaultValue="password" className="space-y-6">
+          <TabsList className="bg-[#1a212b] border-gray-700">
+            <TabsTrigger
+              value="password"
+              className="data-[state=active]:bg-[#84e100] data-[state=active]:text-[#141922]"
+            >
+              Alterar Senha
             </TabsTrigger>
-          )}
-        </TabsList>
+            {userType !== "STUDENT" && (
+              <TabsTrigger
+                value="document"
+                className="data-[state=active]:bg-[#84e100] data-[state=active]:text-[#141922]"
+              >
+                {userType === "PHYSICAL" ? "Alterar Documento" : "Alterar Projeto"}
+              </TabsTrigger>
+            )}
+          </TabsList>
 
-        <TabsContent value="password">
-          <Card>
-            <CardHeader>
-              <CardTitle>Alterar Senha</CardTitle>
-              <CardDescription>Atualize sua senha de acesso ao sistema.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handlePasswordChange} className="space-y-6">
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="newPassword">Nova Senha</Label>
-                    <Input id="newPassword" name="newPassword" type="password" required disabled={isLoading} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="confirmPassword">Confirmar Nova Senha</Label>
-                    <Input id="confirmPassword" name="confirmPassword" type="password" required disabled={isLoading} />
-                  </div>
-                </div>
-
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button type="submit" disabled={isLoading}>
-                      {isLoading ? "Alterando..." : "Alterar Senha"}
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        Ao alterar sua senha, você será o único responsável por manter essa informação segura.
-                        Certifique-se de guardar sua nova senha em um local seguro.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                      <AlertDialogAction type="submit">Continuar</AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              </form>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {userType !== "STUDENT" && (
-          <TabsContent value="document">
-            <Card>
+          <TabsContent value="password">
+            <Card className="bg-[#1a212b]/90 backdrop-blur-sm border-gray-800">
               <CardHeader>
-                <CardTitle>{userType === "PHYSICAL" ? "Alterar Documento" : "Alterar Projeto"}</CardTitle>
-                <CardDescription>
-                  {userType === "PHYSICAL"
-                    ? "Atualize seu comprovante de baixa renda."
-                    : "Atualize a descrição do seu projeto."}
-                </CardDescription>
+                <CardTitle className="text-white">Alterar Senha</CardTitle>
+                <CardDescription className="text-gray-400">Atualize sua senha de acesso ao sistema.</CardDescription>
               </CardHeader>
               <CardContent>
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault()
-                    setIsAlertOpen(true)
-                  }}
-                  className="space-y-6"
-                >
-                  {userType === "PHYSICAL" ? (
+                <form onSubmit={handlePasswordChange} className="space-y-6">
+                  <div className="space-y-4">
                     <div className="space-y-2">
-                      <Label htmlFor="document">Comprovante de Baixa Renda</Label>
+                      <Label htmlFor="newPassword" className="text-white">
+                        Nova Senha
+                      </Label>
                       <Input
-                        id="document"
-                        type="file"
-                        accept=".pdf,.doc,.docx"
-                        onChange={handleFileChange}
+                        id="newPassword"
+                        name="newPassword"
+                        type="password"
                         required
                         disabled={isLoading}
+                        className="bg-[#141922]/80 border-gray-700 text-white focus:border-[#84e100] focus:ring-[#84e100]/20"
                       />
-                      {currentFileUrl && (
-                        <p className="text-sm text-gray-500">
-                          Arquivo atual:{" "}
-                          <a
-                            href={currentFileUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-500 hover:underline"
-                          >
-                            Visualizar
-                          </a>
-                        </p>
-                      )}
                     </div>
-                  ) : (
                     <div className="space-y-2">
-                      <Label htmlFor="project">Descrição do Projeto</Label>
-                      <Textarea
-                        id="project"
-                        placeholder="Descreva seu projeto..."
-                        value={projectDescription}
-                        onChange={(e) => setProjectDescription(e.target.value)}
+                      <Label htmlFor="confirmPassword" className="text-white">
+                        Confirmar Nova Senha
+                      </Label>
+                      <Input
+                        id="confirmPassword"
+                        name="confirmPassword"
+                        type="password"
                         required
                         disabled={isLoading}
-                        className="min-h-[150px]"
+                        className="bg-[#141922]/80 border-gray-700 text-white focus:border-[#84e100] focus:ring-[#84e100]/20"
                       />
                     </div>
-                  )}
+                  </div>
 
-                  <Button type="submit" disabled={isLoading}>
-                    {isLoading ? "Enviando..." : userType === "PHYSICAL" ? "Enviar Documento" : "Atualizar Projeto"}
+                  <Button
+                    type="submit"
+                    disabled={isLoading}
+                    className="bg-[#84e100] hover:bg-[#9aff00] text-[#141922] font-medium"
+                  >
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Alterando...
+                      </>
+                    ) : (
+                      "Alterar Senha"
+                    )}
                   </Button>
                 </form>
-
-                <AlertDialog open={isAlertOpen} onOpenChange={setIsAlertOpen}>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        {userType === "PHYSICAL"
-                          ? "Ao enviar um novo documento, você será o único responsável pela veracidade das informações fornecidas. Certifique-se de que o documento está correto e legível."
-                          : "Ao atualizar a descrição do projeto, você será o único responsável pela veracidade das informações fornecidas. Certifique-se de que todos os detalhes estão corretos."}
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                      <AlertDialogAction onClick={handleDocumentUpdate}>Continuar</AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
               </CardContent>
             </Card>
           </TabsContent>
-        )}
-      </Tabs>
+
+          {userType !== "STUDENT" && (
+            <TabsContent value="document">
+              <Card className="bg-[#1a212b]/90 backdrop-blur-sm border-gray-800">
+                <CardHeader>
+                  <CardTitle className="text-white">
+                    {userType === "PHYSICAL" ? "Alterar Documento" : "Alterar Projeto"}
+                  </CardTitle>
+                  <CardDescription className="text-gray-400">
+                    {userType === "PHYSICAL"
+                      ? "Atualize seu comprovante de baixa renda."
+                      : "Atualize a descrição do seu projeto."}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault()
+                      setIsAlertOpen(true)
+                    }}
+                    className="space-y-6"
+                  >
+                    {userType === "PHYSICAL" ? (
+                      <div className="space-y-2">
+                        <Label htmlFor="document" className="text-white">
+                          Comprovante de Baixa Renda
+                        </Label>
+                        <Input
+                          id="document"
+                          type="file"
+                          accept=".pdf,.doc,.docx"
+                          onChange={handleFileChange}
+                          required
+                          disabled={isLoading}
+                          className="bg-[#141922]/80 border-gray-700 text-white file:text-white file:bg-[#2a3a1c] file:border-0 file:mr-4 file:px-4 file:py-2 hover:file:bg-[#84e100] hover:file:text-[#141922] disabled:opacity-50"
+                        />
+                        {currentFileUrl && (
+                          <p className="text-sm text-gray-400">
+                            Arquivo atual:{" "}
+                            <a
+                              href={currentFileUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[#84e100] hover:underline"
+                            >
+                              Visualizar
+                            </a>
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <Label htmlFor="project" className="text-white">
+                          Descrição do Projeto
+                        </Label>
+                        <Textarea
+                          id="project"
+                          placeholder="Descreva seu projeto..."
+                          value={projectDescription}
+                          onChange={(e) => setProjectDescription(e.target.value)}
+                          required
+                          disabled={isLoading}
+                          className="bg-[#141922]/80 border-gray-700 text-white focus:border-[#84e100] focus:ring-[#84e100]/20 min-h-[150px]"
+                        />
+                      </div>
+                    )}
+
+                    <Button
+                      type="submit"
+                      disabled={isLoading}
+                      className="bg-[#84e100] hover:bg-[#9aff00] text-[#141922] font-medium"
+                    >
+                      {isLoading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Enviando...
+                        </>
+                      ) : userType === "PHYSICAL" ? (
+                        "Enviar Documento"
+                      ) : (
+                        "Atualizar Projeto"
+                      )}
+                    </Button>
+                  </form>
+
+                  <AlertDialog open={isAlertOpen} onOpenChange={setIsAlertOpen}>
+                    <AlertDialogContent className="bg-[#1a212b] border-gray-700 text-white">
+                      <AlertDialogHeader>
+                        <AlertDialogTitle className="text-white">Você tem certeza?</AlertDialogTitle>
+                        <AlertDialogDescription className="text-gray-400">
+                          {userType === "PHYSICAL"
+                            ? "Ao enviar um novo documento, você será o único responsável pela veracidade das informações fornecidas. Certifique-se de que o documento está correto e legível."
+                            : "Ao atualizar a descrição do projeto, você será o único responsável pela veracidade das informações fornecidas. Certifique-se de que todos os detalhes estão corretos."}
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel className="bg-gray-700 hover:bg-gray-600 text-white">
+                          Cancelar
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={handleDocumentUpdate}
+                          className="bg-[#84e100] hover:bg-[#9aff00] text-[#141922]"
+                        >
+                          Continuar
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
+        </Tabs>
+      </div>
     </div>
   )
 }

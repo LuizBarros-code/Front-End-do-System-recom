@@ -1,5 +1,7 @@
 "use client"
 
+import type React from "react"
+
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -197,9 +199,17 @@ export default function RegisterPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-indigo-950 via-slate-900 to-slate-950">
-      <div className="container mx-auto px-4 py-8">
-        <Link href="/" className="inline-flex items-center text-slate-300 hover:text-slate-100 mb-8 transition-colors">
+    <main className="min-h-screen bg-[#141922] relative">
+      {/* Simple gradient background */}
+      <div
+        className="absolute inset-0 z-0"
+        style={{
+          background: "radial-gradient(circle at 50% 70%, rgba(132, 225, 0, 0.15), rgba(0, 0, 0, 0) 60%)",
+        }}
+      />
+
+      <div className="container mx-auto px-4 py-8 relative z-10">
+        <Link href="/" className="inline-flex items-center text-white hover:text-[#84e100] mb-8 transition-colors">
           <ArrowLeft className="mr-2 h-4 w-4" />
           Voltar para página inicial
         </Link>
@@ -210,37 +220,35 @@ export default function RegisterPage() {
           transition={{ duration: 0.5 }}
           className="max-w-4xl mx-auto"
         >
-          <Card className="bg-gradient-to-br from-slate-900/90 to-slate-950/90 backdrop-blur-xl border-slate-800/50">
+          <Card className="bg-[#1a212b]/90 backdrop-blur-sm border-gray-800">
             <CardHeader className="text-center">
-              <CardTitle className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-purple-400">
-                Criar Conta
-              </CardTitle>
-              <CardDescription className="text-slate-400">
+              <CardTitle className="text-3xl font-bold text-[#84e100]">Criar Conta</CardTitle>
+              <CardDescription className="text-gray-400">
                 Escolha o tipo de conta que melhor se adequa ao seu perfil
               </CardDescription>
               <div className="mt-6">
                 <Link href="/register/registered" passHref>
-                  <Button className="bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white">
+                  <Button className="bg-[#84e100] hover:bg-[#9aff00] text-[#141922] font-medium">
                     <GraduationCap className="h-4 w-4 mr-2" />
                     Registro de Aluno
                   </Button>
                 </Link>
-                <p className="mt-2 text-sm text-slate-400">Se você é aluno, clique aqui para se registrar</p>
+                <p className="mt-2 text-sm text-gray-400">Se você é aluno, clique aqui para se registrar</p>
               </div>
             </CardHeader>
             <CardContent>
               <Tabs defaultValue="individual" className="w-full">
-                <TabsList className="grid w-full grid-cols-2 mb-8 bg-slate-800/50">
+                <TabsList className="grid w-full grid-cols-2 mb-8 bg-[#141922]">
                   <TabsTrigger
                     value="individual"
-                    className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500 data-[state=active]:to-purple-600"
+                    className="data-[state=active]:bg-[#84e100] data-[state=active]:text-[#141922]"
                   >
                     <Users className="h-4 w-4 mr-2" />
                     Pessoa Física
                   </TabsTrigger>
                   <TabsTrigger
                     value="company"
-                    className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-pink-500 data-[state=active]:to-pink-600"
+                    className="data-[state=active]:bg-[#84e100] data-[state=active]:text-[#141922]"
                   >
                     <Building2 className="h-4 w-4 mr-2" />
                     Pessoa Jurídica
@@ -251,7 +259,7 @@ export default function RegisterPage() {
                   <form onSubmit={handleSubmit} className="space-y-6" data-user-type="individual">
                     <div className="grid gap-6 md:grid-cols-2">
                       <div className="space-y-2">
-                        <Label htmlFor="name" className="text-slate-200">
+                        <Label htmlFor="name" className="text-white">
                           Nome Completo
                         </Label>
                         <Input
@@ -259,11 +267,11 @@ export default function RegisterPage() {
                           name="name"
                           placeholder="Digite seu nome completo"
                           required
-                          className="bg-slate-800/50 border-slate-700 text-slate-200 placeholder:text-slate-400"
+                          className="bg-[#141922]/80 border-gray-700 text-white placeholder:text-gray-500 focus:border-[#84e100] focus:ring-[#84e100]/20"
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="cpf" className="text-slate-200">
+                        <Label htmlFor="cpf" className="text-white">
                           CPF
                         </Label>
                         <Input
@@ -271,11 +279,11 @@ export default function RegisterPage() {
                           name="cpf"
                           placeholder="000.000.000-00"
                           required
-                          className="bg-slate-800/50 border-slate-700 text-slate-200 placeholder:text-slate-400"
+                          className="bg-[#141922]/80 border-gray-700 text-white placeholder:text-gray-500 focus:border-[#84e100] focus:ring-[#84e100]/20"
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="email" className="text-slate-200">
+                        <Label htmlFor="email" className="text-white">
                           E-mail
                         </Label>
                         <Input
@@ -284,22 +292,22 @@ export default function RegisterPage() {
                           type="email"
                           placeholder="Digite seu e-mail"
                           required
-                          className="bg-slate-800/50 border-slate-700 text-slate-200 placeholder:text-slate-400"
+                          className="bg-[#141922]/80 border-gray-700 text-white placeholder:text-gray-500 focus:border-[#84e100] focus:ring-[#84e100]/20"
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="telefone" className="text-slate-200">
+                        <Label htmlFor="telefone" className="text-white">
                           Telefone
                         </Label>
                         <Input
                           id="telefone"
                           name="telefone"
                           placeholder="(00) 00000-0000"
-                          className="bg-slate-800/50 border-slate-700 text-slate-200 placeholder:text-slate-400"
+                          className="bg-[#141922]/80 border-gray-700 text-white placeholder:text-gray-500 focus:border-[#84e100] focus:ring-[#84e100]/20"
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="comprovanteDeBaixaRenda" className="text-slate-200">
+                        <Label htmlFor="comprovanteDeBaixaRenda" className="text-white">
                           Comprovante de Baixa Renda
                         </Label>
                         <div className="flex items-center gap-2">
@@ -322,22 +330,22 @@ export default function RegisterPage() {
                             }}
                             required
                             disabled={isLoading}
-                            className="bg-slate-800/50 border-slate-700 text-slate-200 file:text-slate-200 file:bg-slate-700 file:border-0 file:mr-4 file:px-4 file:py-2 hover:file:bg-slate-600 disabled:opacity-50"
+                            className="bg-[#141922]/80 border-gray-700 text-white file:text-white file:bg-[#2a3a1c] file:border-0 file:mr-4 file:px-4 file:py-2 hover:file:bg-[#84e100] hover:file:text-[#141922] disabled:opacity-50"
                           />
-                          {isLoading && <Loader2 className="h-4 w-4 animate-spin text-slate-400" />}
+                          {isLoading && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
                           {selectedFile && !isLoading && (
-                            <div className="flex items-center gap-2 text-sm text-slate-400">
+                            <div className="flex items-center gap-2 text-sm text-gray-400">
                               <Upload className="h-4 w-4" />
                               {selectedFile.name}
                             </div>
                           )}
                         </div>
-                        <p className="text-sm text-slate-400">
+                        <p className="text-sm text-gray-400">
                           Anexe um documento que comprove sua baixa renda (máximo 5MB)
                         </p>
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="password" className="text-slate-200">
+                        <Label htmlFor="password" className="text-white">
                           Senha
                         </Label>
                         <Input
@@ -346,7 +354,7 @@ export default function RegisterPage() {
                           type="password"
                           placeholder="Digite sua senha"
                           required
-                          className="bg-slate-800/50 border-slate-700 text-slate-200 placeholder:text-slate-400"
+                          className="bg-[#141922]/80 border-gray-700 text-white placeholder:text-gray-500 focus:border-[#84e100] focus:ring-[#84e100]/20"
                           onChange={(e) => {
                             if (!isValidPassword(e.target.value)) {
                               setError("A senha deve ter pelo menos 8 caracteres e começar com uma letra maiúscula.")
@@ -355,12 +363,12 @@ export default function RegisterPage() {
                             }
                           }}
                         />
-                        <p className="text-sm text-slate-400">
+                        <p className="text-sm text-gray-400">
                           A senha deve ter pelo menos 8 caracteres e começar com uma letra maiúscula.
                         </p>
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="password-confirm" className="text-slate-200">
+                        <Label htmlFor="password-confirm" className="text-white">
                           Confirmar Senha
                         </Label>
                         <Input
@@ -369,7 +377,7 @@ export default function RegisterPage() {
                           type="password"
                           placeholder="Confirme sua senha"
                           required
-                          className="bg-slate-800/50 border-slate-700 text-slate-200 placeholder:text-slate-400"
+                          className="bg-[#141922]/80 border-gray-700 text-white placeholder:text-gray-500 focus:border-[#84e100] focus:ring-[#84e100]/20"
                           onChange={(e) => {
                             const password = (document.getElementById("password") as HTMLInputElement).value
                             if (e.target.value !== password) {
@@ -388,7 +396,7 @@ export default function RegisterPage() {
                     )}
                     <Button
                       type="submit"
-                      className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white"
+                      className="w-full bg-[#84e100] hover:bg-[#9aff00] text-[#141922] font-medium"
                       disabled={isLoading}
                     >
                       {isLoading ? (
@@ -420,7 +428,7 @@ export default function RegisterPage() {
                   >
                     <div className="grid gap-6 md:grid-cols-2">
                       <div className="space-y-2">
-                        <Label htmlFor="name" className="text-slate-200">
+                        <Label htmlFor="name" className="text-white">
                           Nome
                         </Label>
                         <Input
@@ -428,11 +436,11 @@ export default function RegisterPage() {
                           name="name"
                           placeholder="Digite o nome da empresa"
                           required
-                          className="bg-slate-800/50 border-slate-700 text-slate-200 placeholder:text-slate-400"
+                          className="bg-[#141922]/80 border-gray-700 text-white placeholder:text-gray-500 focus:border-[#84e100] focus:ring-[#84e100]/20"
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="cnpj" className="text-slate-200">
+                        <Label htmlFor="cnpj" className="text-white">
                           CNPJ
                         </Label>
                         <Input
@@ -440,11 +448,11 @@ export default function RegisterPage() {
                           name="cnpj"
                           placeholder="00.000.000/0000-00"
                           required
-                          className="bg-slate-800/50 border-slate-700 text-slate-200 placeholder:text-slate-400"
+                          className="bg-[#141922]/80 border-gray-700 text-white placeholder:text-gray-500 focus:border-[#84e100] focus:ring-[#84e100]/20"
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="email" className="text-slate-200">
+                        <Label htmlFor="email" className="text-white">
                           E-mail Corporativo
                         </Label>
                         <Input
@@ -453,33 +461,33 @@ export default function RegisterPage() {
                           type="email"
                           placeholder="Digite o e-mail corporativo"
                           required
-                          className="bg-slate-800/50 border-slate-700 text-slate-200 placeholder:text-slate-400"
+                          className="bg-[#141922]/80 border-gray-700 text-white placeholder:text-gray-500 focus:border-[#84e100] focus:ring-[#84e100]/20"
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="telefone" className="text-slate-200">
+                        <Label htmlFor="telefone" className="text-white">
                           Telefone Comercial
                         </Label>
                         <Input
                           id="telefone"
                           name="telefone"
                           placeholder="(00) 0000-0000"
-                          className="bg-slate-800/50 border-slate-700 text-slate-200 placeholder:text-slate-400"
+                          className="bg-[#141922]/80 border-gray-700 text-white placeholder:text-gray-500 focus:border-[#84e100] focus:ring-[#84e100]/20"
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="endereco" className="text-slate-200">
+                        <Label htmlFor="endereco" className="text-white">
                           Endereço
                         </Label>
                         <Input
                           id="endereco"
                           name="endereco"
                           placeholder="Digite o endereço completo"
-                          className="bg-slate-800/50 border-slate-700 text-slate-200 placeholder:text-slate-400"
+                          className="bg-[#141922]/80 border-gray-700 text-white placeholder:text-gray-500 focus:border-[#84e100] focus:ring-[#84e100]/20"
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="password" className="text-slate-200">
+                        <Label htmlFor="password" className="text-white">
                           Senha
                         </Label>
                         <Input
@@ -488,7 +496,7 @@ export default function RegisterPage() {
                           type="password"
                           placeholder="Digite sua senha"
                           required
-                          className="bg-slate-800/50 border-slate-700 text-slate-200 placeholder:text-slate-400"
+                          className="bg-[#141922]/80 border-gray-700 text-white placeholder:text-gray-500 focus:border-[#84e100] focus:ring-[#84e100]/20"
                           onChange={(e) => {
                             if (!isValidPassword(e.target.value)) {
                               setError("A senha deve ter pelo menos 8 caracteres e começar com uma letra maiúscula.")
@@ -497,12 +505,12 @@ export default function RegisterPage() {
                             }
                           }}
                         />
-                        <p className="text-sm text-slate-400">
+                        <p className="text-sm text-gray-400">
                           A senha deve ter pelo menos 8 caracteres e começar com uma letra maiúscula.
                         </p>
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="password-confirm" className="text-slate-200">
+                        <Label htmlFor="password-confirm" className="text-white">
                           Confirmar Senha
                         </Label>
                         <Input
@@ -511,7 +519,7 @@ export default function RegisterPage() {
                           type="password"
                           placeholder="Confirme sua senha"
                           required
-                          className="bg-slate-800/50 border-slate-700 text-slate-200 placeholder:text-slate-400"
+                          className="bg-[#141922]/80 border-gray-700 text-white placeholder:text-gray-500 focus:border-[#84e100] focus:ring-[#84e100]/20"
                           onChange={(e) => {
                             const password = (document.getElementById("password") as HTMLInputElement).value
                             if (e.target.value !== password) {
@@ -524,14 +532,14 @@ export default function RegisterPage() {
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="comprovanteDeProjeto" className="text-slate-200">
+                      <Label htmlFor="comprovanteDeProjeto" className="text-white">
                         Descrição do Projeto
                       </Label>
                       <Textarea
                         id="comprovanteDeProjeto"
                         name="comprovanteDeProjeto"
                         placeholder="Descreva seu projeto e seus objetivos..."
-                        className="bg-slate-800/50 border-slate-700 text-slate-200 placeholder:text-slate-400 min-h-[100px]"
+                        className="bg-[#141922]/80 border-gray-700 text-white placeholder:text-gray-500 focus:border-[#84e100] focus:ring-[#84e100]/20 min-h-[100px]"
                         required
                         minLength={100}
                         onChange={(e) => {
@@ -542,7 +550,7 @@ export default function RegisterPage() {
                           }
                         }}
                       />
-                      <p className="text-sm text-slate-400">
+                      <p className="text-sm text-gray-400">
                         Forneça uma descrição detalhada do seu projeto e seus objetivos (mínimo de 100 caracteres)
                       </p>
                     </div>
@@ -553,7 +561,7 @@ export default function RegisterPage() {
                     )}
                     <Button
                       type="submit"
-                      className="w-full bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white"
+                      className="w-full bg-[#84e100] hover:bg-[#9aff00] text-[#141922] font-medium"
                       disabled={isLoading}
                     >
                       {isLoading ? "Criando conta..." : "Criar Conta"}
@@ -562,9 +570,9 @@ export default function RegisterPage() {
                 </TabsContent>
               </Tabs>
 
-              <p className="text-center text-sm text-slate-400 mt-6">
+              <p className="text-center text-sm text-gray-400 mt-6">
                 Já tem uma conta?{" "}
-                <Link href="/login" className="text-indigo-400 hover:text-indigo-300 hover:underline">
+                <Link href="/login" className="text-[#84e100] hover:text-[#9aff00] hover:underline">
                   Faça login
                 </Link>
               </p>
