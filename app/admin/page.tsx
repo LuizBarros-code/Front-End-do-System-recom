@@ -44,8 +44,11 @@ interface StudentData {
   id: number
   name: string
   email: string
+  dias: string
   matricula: string
   curso: string
+  periodo: string
+  bolsistaTipo?: string
   status: string
 }
 
@@ -124,6 +127,69 @@ interface AssignedMission {
   status: string
   assignedDate: string
   assignedTo: string
+}
+
+// Add these interfaces to the top of the file, after the existing interfaces
+interface DonationData {
+  id: number
+  name: string
+  codigoDeReferencias: string
+  descricao: string
+  justificativa: string
+  nomeOuEmpresa: string
+  contato: string
+  data: string
+  status: string
+  donatarioId?: number
+  usuariofisicoId?: number
+  usuariojuridicoId?: number
+  createdAt: string
+  deleted: boolean
+  deletedAt?: string
+  // Related equipment counts
+  tecladosCount?: number
+  hdsCount?: number
+  fontesDeAlimentacaoCount?: number
+  gabinetesCount?: number
+  monitoresCount?: number
+  mousesCount?: number
+  estabilizadoresCount?: number
+  impressorasCount?: number
+  placasmaeCount?: number
+  notebooksCount?: number
+  processadoresCount?: number
+}
+
+interface DonorInfo {
+  id: number
+  tipo: string
+  name: string
+  email: string
+}
+
+// Add these interfaces after the existing interfaces
+interface DisposalData {
+  id: number
+  descricao: string
+  quantidade: number
+  metodoDeDescarte: string
+  data: string
+  status: string
+  alunoId?: number
+  createdAt: string
+  deleted: boolean
+  deletedAt?: string
+}
+
+interface StudentInfo {
+  id: number
+  name: string
+  email: string
+  matricula: string
+  curso: string
+  dias: string
+  bolsistaTipo?: string
+  cargo?: string
 }
 
 // Dados de exemplo para estudantes inscritos
@@ -595,6 +661,26 @@ export default function CoordinatorAdminPage() {
   const [students, setStudents] = useState<StudentData[]>([])
   const [currentFilterType, setCurrentFilterType] = useState<string>("")
   const [activeMonth, setActiveMonth] = useState<string>("Maio")
+  // Add these states to the component
+  const [donations, setDonations] = useState<DonationData[]>([])
+  const [donorsInfo, setDonorsInfo] = useState<Map<string, DonorInfo>>(new Map())
+  const [donationsLoading, setDonationsLoading] = useState(true)
+  const [donationsStats, setDonationsStats] = useState({
+    total: 0,
+    pessoaFisica: 0,
+    pessoaJuridica: 0,
+    approvalRate: 0,
+  })
+  // Add these states to the component
+  const [disposals, setDisposals] = useState<DisposalData[]>([])
+  const [disposalsLoading, setDisposalsLoading] = useState(true)
+  const [studentInfoMap, setStudentInfoMap] = useState<Map<number, StudentInfo>>(new Map())
+  const [disposalStats, setDisposalStats] = useState({
+    total: 0,
+    thisMonth: 0,
+    completedPercentage: 0,
+    monthlyData: {} as Record<string, number>,
+  })
   // Adicione estes estados dentro da função CoordinatorAdminPage
   const [selectedReport, setSelectedReport] = useState<number | null>(null)
   const [isReportModalOpen, setIsReportModalOpen] = useState(false)
@@ -668,68 +754,71 @@ export default function CoordinatorAdminPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [projectDonationsRes, userDonationsRes, studentRequestsRes] = await Promise.all([
+        const [projectDonationsRes, userDonationsRes, studentRequestsRes, studentsRes] = await Promise.all([
           fetch(`${API_URL}/doacoes`),
           fetch(`${API_URL}/doacoesUsuarios`),
           fetch(`${API_URL}/solicitacoes`),
+          fetch(`${API_URL}/inscritos`),
         ])
 
-        if (projectDonationsRes.ok && userDonationsRes.ok && studentRequestsRes.ok) {
+        if (projectDonationsRes.ok && userDonationsRes.ok && studentRequestsRes.ok && studentsRes.ok) {
           const projectDonationsData: ProjectDonation[] = await projectDonationsRes.json()
           const userDonationsData: UserDonation[] = await userDonationsRes.json()
           const studentRequestsData: StudentRequest[] = await studentRequestsRes.json()
+          const studentsData = await studentsRes.json()
 
           setProjectDonations(projectDonationsData)
           setUserDonations(userDonationsData)
           setStudentRequests(studentRequestsData)
+          setStudents(studentsData)
         } else {
           throw new Error("Failed to fetch data")
         }
 
         // Mock data for students
-        const mockStudents: StudentData[] = [
-          {
-            id: 1,
-            name: "João Silva",
-            email: "joao.silva@email.com",
-            matricula: "2021001",
-            curso: "Engenharia da Computação",
-            status: "APPROVED",
-          },
-          {
-            id: 2,
-            name: "Maria Santos",
-            email: "maria.santos@email.com",
-            matricula: "2021002",
-            curso: "Ciência da Computação",
-            status: "APPROVED",
-          },
-          {
-            id: 3,
-            name: "Pedro Oliveira",
-            email: "pedro.oliveira@email.com",
-            matricula: "2021003",
-            curso: "Sistemas de Informação",
-            status: "PENDING",
-          },
-          {
-            id: 4,
-            name: "Ana Costa",
-            email: "ana.costa@email.com",
-            matricula: "2021004",
-            curso: "Engenharia Elétrica",
-            status: "REJECTED",
-          },
-          {
-            id: 5,
-            name: "Carlos Souza",
-            email: "carlos.souza@email.com",
-            matricula: "2021005",
-            curso: "Engenharia da Computação",
-            status: "PENDING",
-          },
-        ]
-        setStudents(mockStudents)
+        // const mockStudents: StudentData[] = [
+        //   {
+        //     id: 1,
+        //     name: "João Silva",
+        //     email: "joao.silva@email.com",
+        //     matricula: "2021001",
+        //     curso: "Engenharia da Computação",
+        //     status: "APPROVED",
+        //   },
+        //   {
+        //     id: 2,
+        //     name: "Maria Santos",
+        //     email: "maria.santos@email.com",
+        //     matricula: "2021002",
+        //     curso: "Ciência da Computação",
+        //     status: "APPROVED",
+        //   },
+        //   {
+        //     id: 3,
+        //     name: "Pedro Oliveira",
+        //     email: "pedro.oliveira@email.com",
+        //     matricula: "2021003",
+        //     curso: "Sistemas de Informação",
+        //     status: "PENDING",
+        //   },
+        //   {
+        //     id: 4,
+        //     name: "Ana Costa",
+        //     email: "ana.costa@email.com",
+        //     matricula: "2021004",
+        //     curso: "Engenharia Elétrica",
+        //     status: "REJECTED",
+        //   },
+        //   {
+        //     id: 5,
+        //     name: "Carlos Souza",
+        //     email: "carlos.souza@email.com",
+        //     matricula: "2021005",
+        //     curso: "Engenharia da Computação",
+        //     status: "PENDING",
+        //   },
+        // ]
+        // setStudents(mockStudents)
 
         // Mock data for weekly reports and assigned missions
         const mockWeeklyReports: WeeklyReport[] = [
@@ -805,6 +894,174 @@ export default function CoordinatorAdminPage() {
     }
 
     fetchData()
+  }, [])
+
+  // Add this useEffect to fetch donations data
+  useEffect(() => {
+    const fetchDonationsData = async () => {
+      try {
+        setDonationsLoading(true)
+        const response = await fetch(`${API_URL}/doacoes`)
+
+        if (response.ok) {
+          const donationsData: DonationData[] = await response.json()
+          setDonations(donationsData)
+
+          // Calculate statistics
+          const totalDonations = donationsData.length
+          const pessoaFisicaDonations = donationsData.filter((d) => d.usuariofisicoId).length
+          const pessoaJuridicaDonations = donationsData.filter((d) => d.usuariojuridicoId).length
+          const approvedDonations = donationsData.filter((d) => d.status === "APPROVED").length
+
+          setDonationsStats({
+            total: totalDonations,
+            pessoaFisica: pessoaFisicaDonations,
+            pessoaJuridica: pessoaJuridicaDonations,
+            approvalRate: totalDonations > 0 ? Math.round((approvedDonations / totalDonations) * 100) : 0,
+          })
+
+          // Fetch donor information for each donation
+          const donorInfoMap = new Map<string, DonorInfo>()
+
+          await Promise.all(
+            donationsData.map(async (donation) => {
+              if (donation.usuariofisicoId) {
+                const key = `fisica-${donation.usuariofisicoId}`
+                if (!donorInfoMap.has(key)) {
+                  try {
+                    const donorResponse = await fetch(`${API_URL}/pessoasFisicas/${donation.usuariofisicoId}`)
+                    if (donorResponse.ok) {
+                      const donorData = await donorResponse.json()
+                      donorInfoMap.set(key, {
+                        id: donorData.id,
+                        tipo: "Pessoa Física",
+                        name: donorData.name,
+                        email: donorData.email,
+                      })
+                    }
+                  } catch (error) {
+                    console.error(`Error fetching pessoa fisica ${donation.usuariofisicoId}:`, error)
+                  }
+                }
+              } else if (donation.usuariojuridicoId) {
+                const key = `juridica-${donation.usuariojuridicoId}`
+                if (!donorInfoMap.has(key)) {
+                  try {
+                    const donorResponse = await fetch(`${API_URL}/pessoasJuridicas/${donation.usuariojuridicoId}`)
+                    if (donorResponse.ok) {
+                      const donorData = await donorResponse.json()
+                      donorInfoMap.set(key, {
+                        id: donorData.id,
+                        tipo: "Pessoa Jurídica",
+                        name: donorData.name,
+                        email: donorData.email,
+                      })
+                    }
+                  } catch (error) {
+                    console.error(`Error fetching pessoa juridica ${donation.usuariojuridicoId}:`, error)
+                  }
+                }
+              }
+            }),
+          )
+
+          setDonorsInfo(donorInfoMap)
+        } else {
+          console.error("Failed to fetch donations data")
+        }
+      } catch (error) {
+        console.error("Error fetching donations data:", error)
+      } finally {
+        setDonationsLoading(false)
+      }
+    }
+
+    fetchDonationsData()
+  }, [])
+
+  // Add this useEffect to fetch disposals data
+  useEffect(() => {
+    const fetchDisposalsData = async () => {
+      try {
+        setDisposalsLoading(true)
+        const response = await fetch(`${API_URL}/descartes`)
+
+        if (response.ok) {
+          const disposalsData: DisposalData[] = await response.json()
+          setDisposals(disposalsData)
+
+          // Calculate statistics
+          const totalDisposals = disposalsData.length
+          const currentMonth = new Date().getMonth()
+          const currentYear = new Date().getFullYear()
+          const thisMonthDisposals = disposalsData.filter((d) => {
+            const date = new Date(d.data)
+            return date.getMonth() === currentMonth && date.getFullYear() === currentYear
+          }).length
+          const completedDisposals = disposalsData.filter(
+            (d) => d.status === "COMPLETED" || d.status === "Concluído",
+          ).length
+
+          // Calculate monthly data
+          const monthlyData: Record<string, number> = {}
+          disposalsData.forEach((disposal) => {
+            const date = new Date(disposal.data)
+            const monthYear = `${date.getMonth()}-${date.getFullYear()}`
+            if (!monthlyData[monthYear]) {
+              monthlyData[monthYear] = 0
+            }
+            monthlyData[monthYear]++
+          })
+
+          setDisposalStats({
+            total: totalDisposals,
+            thisMonth: thisMonthDisposals,
+            completedPercentage: totalDisposals > 0 ? Math.round((completedDisposals / totalDisposals) * 100) : 0,
+            monthlyData,
+          })
+
+          // Fetch student information for each disposal
+          const studentInfoMap = new Map<number, StudentInfo>()
+
+          await Promise.all(
+            disposalsData
+              .filter((disposal) => disposal.alunoId)
+              .map(async (disposal) => {
+                if (disposal.alunoId && !studentInfoMap.has(disposal.alunoId)) {
+                  try {
+                    const studentResponse = await fetch(`${API_URL}/alunos/${disposal.alunoId}`)
+                    if (studentResponse.ok) {
+                      const studentData = await studentResponse.json()
+                      studentInfoMap.set(disposal.alunoId, {
+                        id: studentData.id,
+                        name: studentData.name,
+                        email: studentData.email,
+                        matricula: studentData.matricula,
+                        curso: studentData.curso,
+                        dias: studentData.dias,
+                        bolsistaTipo: studentData.bolsistaTipo,
+                        cargo: studentData.cargo,
+                      })
+                    }
+                  } catch (error) {
+                    console.error(`Error fetching student ${disposal.alunoId}:`, error)
+                  }
+                }
+              }),
+          )
+
+          setStudentInfoMap(studentInfoMap)
+        } else {
+          console.error("Failed to fetch disposals data")
+        }
+      } catch (error) {
+        console.error("Error fetching disposals data:", error)
+      } finally {
+        setDisposalsLoading(false)
+      }
+    }
+
+    fetchDisposalsData()
   }, [])
 
   useEffect(() => {
@@ -1001,6 +1258,59 @@ export default function CoordinatorAdminPage() {
     )
   }
 
+  // Add this helper function to get donor info
+  const getDonorInfo = (donation: DonationData) => {
+    if (donation.usuariofisicoId) {
+      return donorsInfo.get(`fisica-${donation.usuariofisicoId}`) || { name: "Desconhecido", tipo: "Pessoa Física" }
+    } else if (donation.usuariojuridicoId) {
+      return (
+        donorsInfo.get(`juridica-${donation.usuariojuridicoId}`) || { name: "Desconhecido", tipo: "Pessoa Jurídica" }
+      )
+    }
+    return { name: donation.nomeOuEmpresa, tipo: "Desconhecido" }
+  }
+
+  // Add this helper function to get student info
+  const getStudentInfo = (alunoId?: number) => {
+    if (!alunoId) return { name: "Não atribuído" }
+    return studentInfoMap.get(alunoId) || { name: "Desconhecido" }
+  }
+
+  // Add this function to count equipment items
+  const countEquipmentItems = (donation: DonationData) => {
+    let total = 0
+    if (donation.tecladosCount) total += donation.tecladosCount
+    if (donation.hdsCount) total += donation.hdsCount
+    if (donation.fontesDeAlimentacaoCount) total += donation.fontesDeAlimentacaoCount
+    if (donation.gabinetesCount) total += donation.gabinetesCount
+    if (donation.monitoresCount) total += donation.monitoresCount
+    if (donation.mousesCount) total += donation.mousesCount
+    if (donation.estabilizadoresCount) total += donation.estabilizadoresCount
+    if (donation.impressorasCount) total += donation.impressorasCount
+    if (donation.placasmaeCount) total += donation.placasmaeCount
+    if (donation.notebooksCount) total += donation.notebooksCount
+    if (donation.processadoresCount) total += donation.processadoresCount
+    return total || 1 // Return at least 1 if no counts are available
+  }
+
+  // Add this function to get equipment description
+  const getEquipmentDescription = (donation: DonationData) => {
+    const items = []
+    if (donation.tecladosCount) items.push(`Teclados (${donation.tecladosCount})`)
+    if (donation.hdsCount) items.push(`HDs (${donation.hdsCount})`)
+    if (donation.fontesDeAlimentacaoCount) items.push(`Fontes (${donation.fontesDeAlimentacaoCount})`)
+    if (donation.gabinetesCount) items.push(`Gabinetes (${donation.gabinetesCount})`)
+    if (donation.monitoresCount) items.push(`Monitores (${donation.monitoresCount})`)
+    if (donation.mousesCount) items.push(`Mouses (${donation.mousesCount})`)
+    if (donation.estabilizadoresCount) items.push(`Estabilizadores (${donation.estabilizadoresCount})`)
+    if (donation.impressorasCount) items.push(`Impressoras (${donation.impressorasCount})`)
+    if (donation.placasmaeCount) items.push(`Placas-mãe (${donation.placasmaeCount})`)
+    if (donation.notebooksCount) items.push(`Notebooks (${donation.notebooksCount})`)
+    if (donation.processadoresCount) items.push(`Processadores (${donation.processadoresCount})`)
+
+    return items.length > 0 ? items.join(", ") : donation.descricao
+  }
+
   const handleOpenModal = (
     id: number,
     type: "project" | "user" | "request" | "disposal" | "electronic",
@@ -1138,6 +1448,35 @@ export default function CoordinatorAdminPage() {
 
       // Retorna true se a missão corresponder a ambos os filtros
       return matchesSearch && matchesStatus
+    })
+  }
+
+  // Add this function to filter disposals
+  const getFilteredDisposals = () => {
+    return disposals.filter((disposal) => {
+      // Filter by search term
+      const studentInfo = getStudentInfo(disposal.alunoId)
+      const searchLower = searchTerm.toLowerCase()
+      const matchesSearch =
+        searchTerm === "" ||
+        disposal.descricao.toLowerCase().includes(searchLower) ||
+        disposal.metodoDeDescarte?.toLowerCase().includes(searchLower) ||
+        studentInfo.name.toLowerCase().includes(searchLower)
+
+      // Filter by status if needed
+      const matchesStatus =
+        statusFilter === "all" ||
+        disposal.status.toLowerCase() === statusFilter.toLowerCase() ||
+        (statusFilter === "concluido" && disposal.status === "COMPLETED") ||
+        (statusFilter === "agendado" && disposal.status === "SCHEDULED") ||
+        (statusFilter === "processamento" && disposal.status === "IN_PROGRESS")
+
+      // Filter by month if activeMonth is set
+      const disposalDate = new Date(disposal.data)
+      const disposalMonth = disposalDate.toLocaleString("default", { month: "long" })
+      const matchesMonth = !activeMonth || disposalMonth.toLowerCase() === activeMonth.toLowerCase()
+
+      return matchesSearch && matchesStatus && matchesMonth
     })
   }
 
@@ -1465,8 +1804,11 @@ export default function CoordinatorAdminPage() {
                       <TableHead>ID</TableHead>
                       <TableHead>Nome</TableHead>
                       <TableHead>Matrícula</TableHead>
-                      <TableHead>Curso</TableHead>
                       <TableHead>Email</TableHead>
+                      <TableHead>Curso</TableHead>
+                      <TableHead>Período</TableHead>
+                      <TableHead>Dias</TableHead>
+                      <TableHead>Bolsista</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Ações</TableHead>
                     </TableRow>
@@ -1477,8 +1819,11 @@ export default function CoordinatorAdminPage() {
                         <TableCell>#{student.id}</TableCell>
                         <TableCell>{student.name}</TableCell>
                         <TableCell>{student.matricula}</TableCell>
-                        <TableCell>{student.curso}</TableCell>
                         <TableCell>{student.email}</TableCell>
+                        <TableCell>{student.curso}</TableCell>
+                        <TableCell>{student.periodo}</TableCell>
+                        <TableCell>{student.dias}</TableCell>
+                        <TableCell>{student.bolsistaTipo || "N/A"}</TableCell>
                         <TableCell>{getStatusBadge(student.status)}</TableCell>
                         <TableCell>
                           <Button size="sm" variant="outline" onClick={() => handleOpenStudentModal(student)}>
@@ -1515,154 +1860,134 @@ export default function CoordinatorAdminPage() {
                   <CardDescription>Visualize estatísticas e dados sobre as doações recebidas.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-6">
-                    {" "}
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                      <Card>
-                        <CardContent className="pt-6">
-                          <div className="text-center">
-                            <div className="text-2xl font-bold">127</div>
-                            <p className="text-xs text-muted-foreground">Total de Doações</p>
-                          </div>
-                        </CardContent>
-                      </Card>
-                      <Card>
-                        <CardContent className="pt-6">
-                          <div className="text-center">
-                            <div className="text-2xl font-bold">78</div>
-                            <p className="text-xs text-muted-foreground">Pessoa Física</p>
-                          </div>
-                        </CardContent>
-                      </Card>
-                      <Card>
-                        <CardContent className="pt-6">
-                          <div className="text-center">
-                            <div className="text-2xl font-bold">49</div>
-                            <p className="text-xs text-muted-foreground">Pessoa Jurídica</p>
-                          </div>
-                        </CardContent>
-                      </Card>
-                      <Card>
-                        <CardContent className="pt-6">
-                          <div className="text-center">
-                            <div className="text-2xl font-bold">85%</div>
-                            <p className="text-xs text-muted-foreground">Taxa de Aprovação</p>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </div>
-                    <div className="flex justify-between items-center mb-4">
-                      <h3 className="text-lg font-medium">Histórico de Doações</h3>
-                      <div className="flex gap-2">
-                        <Input
-                          placeholder="Pesquisar..."
-                          value={searchTerm}
-                          onChange={(e) => setSearchTerm(e.target.value)}
-                          className="w-[250px]"
-                        />
-                        <Select defaultValue="all">
-                          <SelectTrigger className="w-[180px]">
-                            <SelectValue placeholder="Filtrar por tipo" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="all">Todos os tipos</SelectItem>
-                            <SelectItem value="fisica">Pessoa Física</SelectItem>
-                            <SelectItem value="juridica">Pessoa Jurídica</SelectItem>
-                          </SelectContent>
-                        </Select>
+                  {donationsLoading ? (
+                    <div className="flex justify-center items-center py-8">
+                      <div className="text-center">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+                        <p>Carregando dados de doações...</p>
                       </div>
                     </div>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Data</TableHead>
-                          <TableHead>Doador</TableHead>
-                          <TableHead>Tipo</TableHead>
-                          <TableHead>Itens</TableHead>
-                          <TableHead>Quantidade</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead>Ações</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        <TableRow>
-                          <TableCell>15/05/2023</TableCell>
-                          <TableCell>Carlos Eduardo</TableCell>
-                          <TableCell>Pessoa Física</TableCell>
-                          <TableCell>Laptop Dell</TableCell>
-                          <TableCell>1</TableCell>
-                          <TableCell>
-                            <Badge variant="success">Aprovada</Badge>
-                          </TableCell>
-                          <TableCell>
-                            <Button size="sm" variant="outline" onClick={() => handleOpenDonationModal(1, "user")}>
-                              Ver Detalhes
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell>12/05/2023</TableCell>
-                          <TableCell>Empresa XYZ</TableCell>
-                          <TableCell>Pessoa Jurídica</TableCell>
-                          <TableCell>Monitores LCD</TableCell>
-                          <TableCell>5</TableCell>
-                          <TableCell>
-                            <Badge variant="success">Aprovada</Badge>
-                          </TableCell>
-                          <TableCell>
-                            <Button size="sm" variant="outline" onClick={() => handleOpenDonationModal(2, "project")}>
-                              Ver Detalhes
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell>10/05/2023</TableCell>
-                          <TableCell>Ana Beatriz</TableCell>
-                          <TableCell>Pessoa Física</TableCell>
-                          <TableCell>Teclado e Mouse</TableCell>
-                          <TableCell>3</TableCell>
-                          <TableCell>
-                            <Badge variant="success">Aprovada</Badge>
-                          </TableCell>
-                          <TableCell>
-                            <Button size="sm" variant="outline" onClick={() => handleOpenDonationModal(3, "user")}>
-                              Ver Detalhes
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell>05/05/2023</TableCell>
-                          <TableCell>Instituto Tecnologia</TableCell>
-                          <TableCell>Pessoa Jurídica</TableCell>
-                          <TableCell>Servidores</TableCell>
-                          <TableCell>2</TableCell>
-                          <TableCell>
-                            <Badge>Em avaliação</Badge>
-                          </TableCell>
-                          <TableCell>
-                            <Button size="sm" variant="outline" onClick={() => handleOpenDonationModal(4, "project")}>
-                              Ver Detalhes
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell>01/05/2023</TableCell>
-                          <TableCell>Roberto Almeida</TableCell>
-                          <TableCell>Pessoa Física</TableCell>
-                          <TableCell>Impressora HP</TableCell>
-                          <TableCell>1</TableCell>
-                          <TableCell>
-                            <Badge variant="success">Aprovada</Badge>
-                          </TableCell>
-                          <TableCell>
-                            <Button size="sm" variant="outline" onClick={() => handleOpenDonationModal(5, "user")}>
-                              Ver Detalhes
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      </TableBody>
-                    </Table>
-                  </div>
+                  ) : (
+                    <div className="space-y-6">
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <Card>
+                          <CardContent className="pt-6">
+                            <div className="text-center">
+                              <div className="text-2xl font-bold">{donationsStats.total}</div>
+                              <p className="text-xs text-muted-foreground">Total de Doações</p>
+                            </div>
+                          </CardContent>
+                        </Card>
+                        <Card>
+                          <CardContent className="pt-6">
+                            <div className="text-center">
+                              <div className="text-2xl font-bold">{donationsStats.pessoaFisica}</div>
+                              <p className="text-xs text-muted-foreground">Pessoa Física</p>
+                            </div>
+                          </CardContent>
+                        </Card>
+                        <Card>
+                          <CardContent className="pt-6">
+                            <div className="text-center">
+                              <div className="text-2xl font-bold">{donationsStats.pessoaJuridica}</div>
+                              <p className="text-xs text-muted-foreground">Pessoa Jurídica</p>
+                            </div>
+                          </CardContent>
+                        </Card>
+                        <Card>
+                          <CardContent className="pt-6">
+                            <div className="text-center">
+                              <div className="text-2xl font-bold">{donationsStats.approvalRate}%</div>
+                              <p className="text-xs text-muted-foreground">Taxa de Aprovação</p>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </div>
+                      <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-lg font-medium">Histórico de Doações</h3>
+                        <div className="flex gap-2">
+                          <Input
+                            placeholder="Pesquisar..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="w-[250px]"
+                          />
+                          <Select defaultValue="all">
+                            <SelectTrigger className="w-[180px]">
+                              <SelectValue placeholder="Filtrar por tipo" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">Todos os tipos</SelectItem>
+                              <SelectItem value="fisica">Pessoa Física</SelectItem>
+                              <SelectItem value="juridica">Pessoa Jurídica</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Data</TableHead>
+                            <TableHead>Doador</TableHead>
+                            <TableHead>Tipo</TableHead>
+                            <TableHead>Itens</TableHead>
+                            <TableHead>Quantidade</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead>Ações</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {donations.length > 0 ? (
+                            donations
+                              .filter((donation) => {
+                                // Filter by search term
+                                const donorInfo = getDonorInfo(donation)
+                                const searchLower = searchTerm.toLowerCase()
+                                return (
+                                  searchTerm === "" ||
+                                  donation.name.toLowerCase().includes(searchLower) ||
+                                  donation.descricao.toLowerCase().includes(searchLower) ||
+                                  donorInfo.name.toLowerCase().includes(searchLower)
+                                )
+                              })
+                              .map((donation) => {
+                                const donorInfo = getDonorInfo(donation)
+                                return (
+                                  <TableRow key={donation.id}>
+                                    <TableCell>
+                                      <div className="flex items-center">
+                                        <Calendar className="w-4 h-4 mr-2 text-muted-foreground" />
+                                        {new Date(donation.data).toLocaleDateString()}
+                                      </div>
+                                    </TableCell>
+                                    <TableCell>{donorInfo.name}</TableCell>
+                                    <TableCell>{donorInfo.tipo}</TableCell>
+                                    <TableCell>{getEquipmentDescription(donation)}</TableCell>
+                                    <TableCell>{countEquipmentItems(donation)}</TableCell>
+                                    <TableCell>{getStatusBadge(donation.status)}</TableCell>
+                                    <TableCell>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => handleOpenDonationModal(donation.id, "project")}
+                                      >
+                                        Ver Detalhes
+                                      </Button>
+                                    </TableCell>
+                                  </TableRow>
+                                )
+                              })
+                          ) : (
+                            <TableRow>
+                              <TableCell colSpan={7} className="text-center py-4">
+                                Nenhuma doação encontrada.
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -1674,182 +1999,181 @@ export default function CoordinatorAdminPage() {
                   <CardDescription>Visualize os descartes realizados por período.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <Card>
-                        <CardContent className="pt-6">
-                          <div className="text-center">
-                            <div className="text-2xl font-bold">78</div>
-                            <p className="text-xs text-muted-foreground">Total de Descartes</p>
-                          </div>
-                        </CardContent>
-                      </Card>
-                      <Card>
-                        <CardContent className="pt-6">
-                          <div className="text-center">
-                            <div className="text-2xl font-bold">12</div>
-                            <p className="text-xs text-muted-foreground">Descartes este Mês</p>
-                          </div>
-                        </CardContent>
-                      </Card>
-                      <Card>
-                        <CardContent className="pt-6">
-                          <div className="text-center">
-                            <div className="text-2xl font-bold">85%</div>
-                            <p className="text-xs text-muted-foreground">Concluídos</p>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </div>
-
-                    <div className="mb-6">
-                      <div className="flex justify-between items-center mb-4">
-                        <h3 className="text-lg font-medium">Descartes por Mês</h3>
-                        <Select defaultValue="2023">
-                          <SelectTrigger className="w-[120px]">
-                            <SelectValue placeholder="Ano" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="2023">2023</SelectItem>
-                            <SelectItem value="2022">2022</SelectItem>
-                            <SelectItem value="2021">2021</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        {["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho"].map((month, index) => (
-                          <Button
-                            key={index}
-                            variant="outline"
-                            className="h-auto py-6 flex flex-col items-center justify-center"
-                            onClick={() => (setActiveMonth ? setActiveMonth(month) : null)}
-                          >
-                            <span className="text-lg font-bold">{month}</span>
-                            <span className="text-sm text-muted-foreground mt-1">2023</span>
-                            <span className="text-xs bg-primary/10 px-2 py-1 rounded-full mt-2">
-                              {[8, 12, 15, 10, 12, 5][index]} descartes
-                            </span>
-                          </Button>
-                        ))}
+                  {disposalsLoading ? (
+                    <div className="flex justify-center items-center py-8">
+                      <div className="text-center">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+                        <p>Carregando dados de descartes...</p>
                       </div>
                     </div>
+                  ) : (
+                    <div className="space-y-6">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <Card>
+                          <CardContent className="pt-6">
+                            <div className="text-center">
+                              <div className="text-2xl font-bold">{disposalStats.total}</div>
+                              <p className="text-xs text-muted-foreground">Total de Descartes</p>
+                            </div>
+                          </CardContent>
+                        </Card>
+                        <Card>
+                          <CardContent className="pt-6">
+                            <div className="text-center">
+                              <div className="text-2xl font-bold">{disposalStats.thisMonth}</div>
+                              <p className="text-xs text-muted-foreground">Descartes este Mês</p>
+                            </div>
+                          </CardContent>
+                        </Card>
+                        <Card>
+                          <CardContent className="pt-6">
+                            <div className="text-center">
+                              <div className="text-2xl font-bold">{disposalStats.completedPercentage}%</div>
+                              <p className="text-xs text-muted-foreground">Concluídos</p>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </div>
 
-                    <div>
-                      <div className="flex justify-between items-center mb-4">
-                        <h3 className="text-lg font-medium">Descartes de {activeMonth} 2023</h3>
-                        <div className="flex gap-2">
-                          <Input
-                            placeholder="Pesquisar..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-[250px]"
-                          />
-                          <Select defaultValue="all">
-                            <SelectTrigger className="w-[180px]">
-                              <SelectValue placeholder="Filtrar por status" />
+                      <div className="mb-6">
+                        <div className="flex justify-between items-center mb-4">
+                          <h3 className="text-lg font-medium">Descartes por Mês</h3>
+                          <Select defaultValue="2023">
+                            <SelectTrigger className="w-[120px]">
+                              <SelectValue placeholder="Ano" />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="all">Todos os status</SelectItem>
-                              <SelectItem value="concluido">Concluído</SelectItem>
-                              <SelectItem value="agendado">Agendado</SelectItem>
-                              <SelectItem value="processamento">Em processamento</SelectItem>
+                              <SelectItem value="2023">2023</SelectItem>
+                              <SelectItem value="2022">2022</SelectItem>
+                              <SelectItem value="2021">2021</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                          {["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho"].map((month, index) => {
+                            // Get month number (0-based)
+                            const monthIndex = index
+                            // Count disposals for this month in the current year
+                            const monthYear = `${monthIndex}-${selectedYear}`
+                            const disposalCount = disposalStats.monthlyData[monthYear] || 0
+
+                            return (
+                              <Button
+                                key={index}
+                                variant="outline"
+                                className={`h-auto py-6 flex flex-col items-center justify-center ${
+                                  activeMonth === month ? "border-primary" : ""
+                                }`}
+                                onClick={() => setActiveMonth(month)}
+                              >
+                                <span className="text-lg font-bold">{month}</span>
+                                <span className="text-sm text-muted-foreground mt-1">{selectedYear}</span>
+                                <span className="text-xs bg-primary/10 px-2 py-1 rounded-full mt-2">
+                                  {disposalCount} descartes
+                                </span>
+                              </Button>
+                            )
+                          })}
+                        </div>
                       </div>
 
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Data</TableHead>
-                            <TableHead>Descrição do Descarte</TableHead>
-                            <TableHead>Responsável</TableHead>
-                            <TableHead>Quantidade</TableHead>
-                            <TableHead>Destino</TableHead>
-                            <TableHead>Status</TableHead>
-                            <TableHead>Ações</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          <TableRow>
-                            <TableCell>25/05/2023</TableCell>
-                            <TableCell>Lote de equipamentos obsoletos (monitores CRT, teclados antigos)</TableCell>
-                            <TableCell>Ana Silva</TableCell>
-                            <TableCell>12 itens</TableCell>
-                            <TableCell>Reciclagem Tecnológica SA</TableCell>
-                            <TableCell>
-                              <Badge variant="success">Concluído</Badge>
-                            </TableCell>
-                            <TableCell>
-                              <Button size="sm" variant="outline" onClick={() => handleOpenDisposalModal(1)}>
-                                Ver Detalhes
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                          <TableRow>
-                            <TableCell>20/05/2023</TableCell>
-                            <TableCell>Baterias e componentes com metais pesados</TableCell>
-                            <TableCell>Carlos Mendes</TableCell>
-                            <TableCell>25 itens</TableCell>
-                            <TableCell>EcoDescarte Ltda</TableCell>
-                            <TableCell>
-                              <Badge variant="success">Concluído</Badge>
-                            </TableCell>
-                            <TableCell>
-                              <Button size="sm" variant="outline" onClick={() => handleOpenDisposalModal(2)}>
-                                Ver Detalhes
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                          <TableRow>
-                            <TableCell>18/05/2023</TableCell>
-                            <TableCell>Placas-mãe danificadas e componentes eletrônicos diversos</TableCell>
-                            <TableCell>Pedro Santos</TableCell>
-                            <TableCell>30 itens</TableCell>
-                            <TableCell>Reciclagem Tecnológica SA</TableCell>
-                            <TableCell>
-                              <Badge>Em processamento</Badge>
-                            </TableCell>
-                            <TableCell>
-                              <Button size="sm" variant="outline" onClick={() => handleOpenDisposalModal(3)}>
-                                Ver Detalhes
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                          <TableRow>
-                            <TableCell>15/05/2023</TableCell>
-                            <TableCell>Equipamentos com danos irreparáveis (impressoras, scanners)</TableCell>
-                            <TableCell>Mariana Costa</TableCell>
-                            <TableCell>8 itens</TableCell>
-                            <TableCell>EcoDescarte Ltda</TableCell>
-                            <TableCell>
-                              <Badge variant="success">Concluído</Badge>
-                            </TableCell>
-                            <TableCell>
-                              <Button size="sm" variant="outline" onClick={() => handleOpenDisposalModal(4)}>
-                                Ver Detalhes
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                          <TableRow>
-                            <TableCell>10/05/2023</TableCell>
-                            <TableCell>Cabos, fontes de alimentação e periféricos diversos</TableCell>
-                            <TableCell>Lucas Oliveira</TableCell>
-                            <TableCell>45 itens</TableCell>
-                            <TableCell>Reciclagem Tecnológica SA</TableCell>
-                            <TableCell>
-                              <Badge variant="outline">Agendado</Badge>
-                            </TableCell>
-                            <TableCell>
-                              <Button size="sm" variant="outline" onClick={() => handleOpenDisposalModal(5)}>
-                                Ver Detalhes
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        </TableBody>
-                      </Table>
+                      <div>
+                        <div className="flex justify-between items-center mb-4">
+                          <h3 className="text-lg font-medium">
+                            Descartes de {activeMonth} {selectedYear}
+                          </h3>
+                          <div className="flex gap-2">
+                            <Input
+                              placeholder="Pesquisar..."
+                              value={searchTerm}
+                              onChange={(e) => setSearchTerm(e.target.value)}
+                              className="w-[250px]"
+                            />
+                            <Select defaultValue="all" value={statusFilter} onValueChange={setStatusFilter}>
+                              <SelectTrigger className="w-[180px]">
+                                <SelectValue placeholder="Filtrar por status" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="all">Todos os status</SelectItem>
+                                <SelectItem value="concluido">Concluído</SelectItem>
+                                <SelectItem value="agendado">Agendado</SelectItem>
+                                <SelectItem value="processamento">Em processamento</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Data</TableHead>
+                              <TableHead>Descrição do Descarte</TableHead>
+                              <TableHead>Responsável</TableHead>
+                              <TableHead>Quantidade</TableHead>
+                              <TableHead>Destino</TableHead>
+                              <TableHead>Status</TableHead>
+                              <TableHead>Ações</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {getFilteredDisposals().length > 0 ? (
+                              getFilteredDisposals().map((disposal) => {
+                                const studentInfo = getStudentInfo(disposal.alunoId)
+                                return (
+                                  <TableRow key={disposal.id}>
+                                    <TableCell>
+                                      <div className="flex items-center">
+                                        <Calendar className="w-4 h-4 mr-2 text-muted-foreground" />
+                                        {new Date(disposal.data).toLocaleDateString()}
+                                      </div>
+                                    </TableCell>
+                                    <TableCell>{disposal.descricao}</TableCell>
+                                    <TableCell>{studentInfo.name}</TableCell>
+                                    <TableCell>{disposal.quantidade} itens</TableCell>
+                                    <TableCell>{disposal.metodoDeDescarte}</TableCell>
+                                    <TableCell>
+                                      <Badge
+                                        variant={
+                                          disposal.status === "COMPLETED" || disposal.status === "Concluído"
+                                            ? "success"
+                                            : disposal.status === "SCHEDULED" || disposal.status === "Agendado"
+                                              ? "outline"
+                                              : "default"
+                                        }
+                                      >
+                                        {disposal.status === "COMPLETED"
+                                          ? "Concluído"
+                                          : disposal.status === "SCHEDULED"
+                                            ? "Agendado"
+                                            : disposal.status === "IN_PROGRESS"
+                                              ? "Em processamento"
+                                              : disposal.status}
+                                      </Badge>
+                                    </TableCell>
+                                    <TableCell>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => handleOpenDisposalModal(disposal.id)}
+                                      >
+                                        Ver Detalhes
+                                      </Button>
+                                    </TableCell>
+                                  </TableRow>
+                                )
+                              })
+                            ) : (
+                              <TableRow>
+                                <TableCell colSpan={7} className="text-center py-4">
+                                  Nenhum descarte encontrado com os filtros selecionados.
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </TableBody>
+                        </Table>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
