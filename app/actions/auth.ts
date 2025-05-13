@@ -1,6 +1,6 @@
 'use server'
 
-const API_URL = 'http://localhost:3456'
+const API_URL = 'http://26.99.103.209:3456'
 
 interface VerifyResponse {
   success: boolean

@@ -1,14 +1,8 @@
 "use client"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { motion } from "framer-motion"
-import { GraduationCap, Users, Building2, ArrowRight, Heart, Gift, HandHeart, Sparkles } from "lucide-react"
+import { ArrowRight, Sparkles } from "lucide-react"
 import Link from "next/link"
-
-const stats = [
-  { value: "500+", label: "Doações Realizadas" },
-  { value: "1000+", label: "Pessoas Impactadas" },
-  { value: "50+", label: "Parceiros" },
-]
+import { PartnersCarousel } from "@/components/PartnersCarousel"
 
 export default function Home() {
   return (
@@ -32,7 +26,7 @@ export default function Home() {
             transition={{ duration: 0.5 }}
           >
             <Sparkles className="h-4 w-4 text-[#84e100]" />
-            <span className="text-sm font-medium text-[#84e100]">Faça a diferença hoje</span>
+            <span className="text-sm font-medium text-[#84e100]">Transformando vidas através da tecnologia</span>
           </motion.div>
 
           <motion.h1
@@ -41,7 +35,7 @@ export default function Home() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7 }}
           >
-            Sistema de Doações
+            RECOM
           </motion.h1>
 
           <motion.p
@@ -50,7 +44,7 @@ export default function Home() {
             animate={{ opacity: 1 }}
             transition={{ duration: 0.7, delay: 0.2 }}
           >
-            Conectando pessoas e transformando vidas através da tecnologia e solidariedade
+            Projeto de recondicionamento de computadores para doação a pessoas e entidades sem fins lucrativos
           </motion.p>
 
           <div className="flex flex-col sm:flex-row gap-4 mb-16 w-full max-w-md mx-auto">
@@ -68,88 +62,17 @@ export default function Home() {
               Criar Conta
             </Link>
           </div>
-
-          {/* Stats */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 w-full max-w-3xl">
-            {stats.map((stat, i) => (
-              <motion.div
-                key={stat.label}
-                className="text-center p-6 bg-[#1a212b]/80 rounded-xl border border-gray-800"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: 0.1 * i }}
-              >
-                <div className="text-3xl font-bold text-[#84e100]">{stat.value}</div>
-                <div className="text-gray-400 mt-1">{stat.label}</div>
-              </motion.div>
-            ))}
-          </div>
         </div>
 
-        {/* Cards Section */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-8">
-          {[
-            {
-              title: "Pessoa Física",
-              description: "Para indivíduos que desejam contribuir ou precisam de apoio",
-              icon: Users,
-              items: [
-                "Faça doações de forma segura",
-                "Acompanhe o impacto de suas contribuições",
-                "Solicite apoio quando necessário",
-                "Conecte-se com a comunidade",
-              ],
-              itemIcon: Gift,
-            },
-            {
-              title: "Pessoa Jurídica",
-              description: "Para empresas e organizações comprometidas com a mudança",
-              icon: Building2,
-              items: [
-                "Gerencie doações em larga escala",
-                "Acompanhe métricas de impacto",
-                "Emita relatórios detalhados",
-                "Integre-se com projetos sociais",
-              ],
-              itemIcon: HandHeart,
-            },
-            {
-              title: "Alunos",
-              description: "Para estudantes engajados em projetos sociais",
-              icon: GraduationCap,
-              items: [
-                "Acesse recursos exclusivos",
-                "Participe de projetos sociais",
-                "Acompanhe seu progresso",
-                "Conecte-se com mentores",
-              ],
-              itemIcon: Heart,
-            },
-          ].map((card, cardIndex) => (
-            <Card
-              key={card.title}
-              className="bg-[#1a212b]/80 border-gray-800 hover:border-[#84e100]/50 transition-all duration-300"
-            >
-              <CardHeader>
-                <div className="p-3 w-fit rounded-xl bg-[#2a3a1c] border border-[#84e100]/30 mb-2">
-                  <card.icon className="h-6 w-6 text-[#84e100]" />
-                </div>
-                <CardTitle className="text-xl text-white">{card.title}</CardTitle>
-                <CardDescription className="text-gray-400">{card.description}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ul className="space-y-3">
-                  {card.items.map((item, i) => (
-                    <li key={i} className="flex items-center gap-2 text-gray-300">
-                      <card.itemIcon className="h-4 w-4 text-[#84e100]" />
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        {/* Partners Carousel */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7, delay: 0.4 }}
+        >
+          <h2 className="text-2xl md:text-3xl font-bold text-center text-white mb-8">Nossos Parceiros</h2>
+          <PartnersCarousel />
+        </motion.div>
       </div>
     </main>
   )

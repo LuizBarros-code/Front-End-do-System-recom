@@ -16,7 +16,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 
 type UserType = "PHYSICAL" | "LEGAL" | "STUDENT" | "ADMIN"
 
-const API_URL = "http://localhost:3456"
+const API_URL = "http://26.99.103.209:3456"
 
 export default function LoginPage() {
   const [userType, setUserType] = useState<UserType>("PHYSICAL")
@@ -168,11 +168,17 @@ export default function LoginPage() {
           endpoint = `/pessoasJuridicas/verify/${email}/${password}`
           break
         case "STUDENT":
-          endpoint = `/alunos/verify/${matricula}/${password}`
+          endpoint = `/alunos/verify`
           break
       }
 
-      const response = await fetch(`${API_URL}${endpoint}`)
+      const response = await fetch(`${API_URL}${endpoint}`, {
+        method: userType === "STUDENT" ? "POST" : "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: userType === "STUDENT" ? JSON.stringify({ matricula, password }) : undefined,
+      })
 
       if (response.ok) {
         const data = await response.json()
@@ -263,7 +269,7 @@ export default function LoginPage() {
 
       <Card className="w-[480px] bg-[#1a212b]/90 backdrop-blur-sm border-gray-800 z-10">
         <CardHeader className="pb-4">
-          <CardTitle className="text-[#84e100] text-2xl text-center">Sistema de Doações</CardTitle>
+          <CardTitle className="text-[#84e100] text-2xl text-center">Projeto Recom</CardTitle>
           <CardDescription className="text-gray-400 text-center">Faça login para continuar</CardDescription>
         </CardHeader>
         <CardContent>

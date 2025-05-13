@@ -63,7 +63,7 @@ export default function StudentRegisterPage() {
       }
 
       try {
-        const response = await fetch("http://localhost:3456/alunos", {
+        const response = await fetch("http://26.106.92.184:3456/alunos", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

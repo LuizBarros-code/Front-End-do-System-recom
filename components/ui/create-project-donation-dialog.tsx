@@ -21,7 +21,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { useToast } from "@/components/ui/use-toast"
 import { EquipmentSelector } from "./equipment-selector"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3456"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://26.99.103.209:3456"
 
 type UserType = "fisica" | "juridica"
 type NameOption = {
@@ -93,7 +93,7 @@ export function CreateProjectDonationDialog({ userId }: CreateProjectDonationDia
       }
 
       const payload = {
-        name: formData.name,
+        name: "Doação de Equipamentos",
         codigoDeReferencias: formData.codigoDeReferencias,
         descricao: formData.descricao,
         justificativa: formData.justificativa,
@@ -232,8 +232,8 @@ export function CreateProjectDonationDialog({ userId }: CreateProjectDonationDia
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="nomeOuEmpresa">{userType === "fisica" ? "Nome Completo" : "Nome da Empresa"}</Label>
-            <Select value={formData.nomeOuEmpresa} onValueChange={handleNameSelect} disabled={isLoading}>
+            <Label htmlFor="nomeOuEmpresa">Nome do Destinatário</Label>
+            <Select value={formData.nomeOuEmpresa} onValueChange={handleNameSelect} disabled={isLoading} required>
               <SelectTrigger>
                 <SelectValue
                   placeholder={
@@ -253,17 +253,6 @@ export function CreateProjectDonationDialog({ userId }: CreateProjectDonationDia
                 ))}
               </SelectContent>
             </Select>
-          </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="name">Nome do Projeto</Label>
-            <Input
-              id="name"
-              placeholder="Digite o nome do projeto"
-              value={formData.name}
-              onChange={handleInputChange}
-              required
-            />
           </div>
 
           <div className="grid gap-2">

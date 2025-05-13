@@ -25,6 +25,8 @@ import { CreateProjectDonationDialog } from "../../components/ui/create-project-
 import { CreateDisposalDialog } from "../../components/ui/create-disposal-dialog"
 import { CreateElectronicDialog } from "../../components/ui/create-electronic-dialog"
 import { DetailModal } from "../../components/DetailModal"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Textarea } from "@/components/ui/textarea"
 
 interface StudentData {
   id: number
@@ -86,16 +88,19 @@ interface Electronic {
   tipo: string
   modelo?: string
   estado?: string
-  imagem?: string
+  imagem?: string | null
+  endpointType?: string
 }
 
 interface WeeklyReport {
   id: number
-  title: string
-  week: string
-  content: string
-  status: string
-  submissionDate: string
+  name: string
+  periodo: string
+  createdAt: string
+  resumo: string
+  atividades: string
+  objetivos: string
+  desafios: string
   feedback?: string
 }
 
@@ -128,8 +133,21 @@ export default function StudentAdminPage() {
   const [electronics, setElectronics] = useState<Electronic[]>([])
   const [weeklyReports, setWeeklyReports] = useState<WeeklyReport[]>([])
   const [assignedMissions, setAssignedMissions] = useState<AssignedMission[]>([])
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false)
+  const [reportForm, setReportForm] = useState({
+    name: "",
+    resumo: "",
+    periodo: "",
+    atividades: "",
+    objetivos: "",
+    desafios: ""
+  })
+  const [isSubmittingReport, setIsSubmittingReport] = useState(false)
+  const [isReportDetailOpen, setIsReportDetailOpen] = useState(false)
+  const [selectedReport, setSelectedReport] = useState<WeeklyReport | null>(null)
 
-  const API_URL = "http://localhost:3456"
+  const API_URL = "http://26.99.103.209:3456"
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -182,51 +200,6 @@ export default function StudentAdminPage() {
         } else {
           throw new Error("Failed to fetch data")
         }
-
-        // Mock data for weekly reports and assigned missions
-        const mockWeeklyReports: WeeklyReport[] = [
-          {
-            id: 1,
-            title: "Progresso Semanal - Semana 1",
-            week: "01/03/2023 - 07/03/2023",
-            content: "Realizei a triagem de 10 equipamentos e participei do workshop de reparo de monitores.",
-            status: "APPROVED",
-            submissionDate: "2023-03-07T10:30:00",
-            feedback: "Excelente trabalho! Continue assim.",
-          },
-          {
-            id: 2,
-            title: "Progresso Semanal - Semana 2",
-            week: "08/03/2023 - 14/03/2023",
-            content: "Consertei 5 notebooks e cataloguei 15 novos itens recebidos por doação.",
-            status: "PENDING",
-            submissionDate: "2023-03-14T09:45:00",
-          },
-        ]
-
-        const mockAssignedMissions: AssignedMission[] = [
-          {
-            id: 1,
-            title: "Reparo de Monitores",
-            description: "Realizar diagnóstico e reparo em 5 monitores LCD com problemas de imagem.",
-            deadline: "2023-03-20T18:00:00",
-            priority: "high",
-            status: "IN_PROGRESS",
-            assignedDate: "2023-03-10T09:00:00",
-          },
-          {
-            id: 2,
-            title: "Catalogação de Doações",
-            description: "Catalogar e registrar no sistema 20 novos itens recebidos na última campanha de doação.",
-            deadline: "2023-03-25T18:00:00",
-            priority: "medium",
-            status: "PENDING",
-            assignedDate: "2023-03-12T14:30:00",
-          },
-        ]
-
-        setWeeklyReports(mockWeeklyReports)
-        setAssignedMissions(mockAssignedMissions)
       } catch (error) {
         console.error("Error fetching data:", error)
       }
@@ -236,43 +209,97 @@ export default function StudentAdminPage() {
   }, [])
 
   useEffect(() => {
-    const fetchElectronics = async () => {
+    const fetchWeeklyReports = async () => {
+      if (!studentData?.id) return
       try {
-        const endpoints = [
-          { url: "estabilizadores", type: "estabilizador" },
-          { url: "fontesDeAlimentacao", type: "fonte" },
-          { url: "gabinetes", type: "gabinete" },
-          { url: "hds", type: "hd" },
-          { url: "impressoras", type: "impressora" },
-          { url: "monitores", type: "monitor" },
-          { url: "notebooks", type: "notebook" },
-          { url: "placasMae", type: "placa mãe" },
-          { url: "processadores", type: "processador" },
-          { url: "teclados", type: "teclado" },
-        ]
-
-        const responses = await Promise.all(
-          endpoints.map((endpoint) =>
-            fetch(`${API_URL}/${endpoint.url}`).then(async (res) => {
-              if (res.ok) {
-                const data = await res.json()
-                // Add the endpoint type to each item for reference
-                return data.map((item: any) => ({ ...item, endpointType: endpoint.type }))
-              }
-              return []
-            }),
-          ),
-        )
-
-        const allElectronics = responses.flat()
-        setElectronics(allElectronics)
-      } catch (error) {
-        console.error("Error fetching electronics:", error)
+        const res = await fetch(`http://localhost:3456/relatorios/usuario/${studentData.id}`)
+        if (!res.ok) throw new Error("Erro ao buscar relatórios semanais")
+        const reports = await res.json()
+        setWeeklyReports(reports)
+      } catch (err) {
+        console.error("Erro ao buscar relatórios semanais:", err)
       }
     }
+    fetchWeeklyReports()
+  }, [studentData])
 
-    fetchElectronics()
-  }, [])
+  const fetchElectronics = async (): Promise<void> => {
+    try {
+      const endpoints = [
+        { url: "estabilizadores", type: "Estabilizador", img: "estabilizado" },
+        { url: "fontesDeAlimentacao", type: "Fonte de Alimentação", img: "fonteDeAlimentacao" },
+        { url: "gabinetes", type: "Gabinete", img: "gabinete" },
+        { url: "hds", type: "HD", img: "hd" },
+        { url: "impressoras", type: "Impressora", img: "impressora" },
+        { url: "monitores", type: "Monitor", img: "monitor" },
+        { url: "notebooks", type: "Notebook", img: "notebook" },
+        { url: "placasMae", type: "Placa Mãe", img: "placaMae" },
+        { url: "processadores", type: "Processador", img: "processador" },
+        { url: "teclados", type: "Teclado", img: "teclado" },
+      ];
+      const responses = await Promise.all(
+        endpoints.map((endpoint) =>
+          fetch(`http://localhost:3456/${endpoint.url}`).then(async (res) => {
+            if (res.ok) {
+              const data = await res.json();
+              // Para cada eletrônico, buscar a imagem
+              const withImages = await Promise.all(
+                data.map(async (item: any) => {
+                  try {
+                    const imgRes = await fetch(`http://localhost:3456/imagens/${endpoint.img}/${item.id}`);
+                    if (imgRes.ok) {
+                      const imgData = await imgRes.json();
+                      console.log('imgData para', endpoint.img, item.id, imgData);
+                      let caminho = null;
+                      // Se vier array, pega o primeiro
+                      if (Array.isArray(imgData) && imgData.length > 0) {
+                        caminho = imgData[0].url;
+                      } else if (imgData && imgData.caminho) {
+                        caminho = imgData.url;
+                      }
+                      let imgUrl = null;
+                      if (caminho) {
+                        let finalPath = caminho.startsWith('/') ? caminho : `/${caminho}`;
+                        imgUrl = `http://localhost:3456${finalPath}`;
+                      }
+                      console.log('imgUrl final para', endpoint.img, item.id, imgUrl);
+                      return { ...item, tipo: endpoint.type, endpointType: endpoint.url, imagem: imgUrl };
+                    }
+                  } catch {}
+                  return { ...item, tipo: endpoint.type, endpointType: endpoint.url, imagem: null };
+                })
+              );
+              return withImages;
+            }
+            return [];
+          })
+        )
+      );
+      const allElectronics = responses.flat();
+      setElectronics(allElectronics);
+    } catch (error) {
+      console.error("Error fetching electronics:", error);
+    }
+  };
+
+  useEffect(() => {
+    fetchElectronics();
+  }, []);
+
+  useEffect(() => {
+    const fetchAssignedMissions = async () => {
+      if (!studentData?.id) return
+      try {
+        const res = await fetch(`http://localhost:3456/missoes/usuario/${studentData.id}`)
+        if (!res.ok) throw new Error("Erro ao buscar missões atribuídas")
+        const missions = await res.json()
+        setAssignedMissions(missions)
+      } catch (err) {
+        console.error("Erro ao buscar missões atribuídas:", err)
+      }
+    }
+    fetchAssignedMissions()
+  }, [studentData])
 
   const handleStatusUpdate = async (id: string, status: string, type: string) => {
     setIsLoading(true)
@@ -375,6 +402,59 @@ export default function StudentAdminPage() {
     setIsModalOpen(true)
   }
 
+  const handleOpenReportModal = () => setIsReportModalOpen(true)
+  const handleCloseReportModal = () => {
+    setIsReportModalOpen(false)
+    setReportForm({
+      name: "",
+      resumo: "",
+      periodo: "",
+      atividades: "",
+      objetivos: "",
+      desafios: ""
+    })
+  }
+  const handleReportInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    setReportForm({ ...reportForm, [e.target.name]: e.target.value })
+  }
+  const handleCreateReport = async () => {
+    if (!studentData?.id) return
+    setIsSubmittingReport(true)
+    try {
+      const res = await fetch("http://localhost:3456/relatorios", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          usuarioId: studentData.id,
+          name: reportForm.name,
+          resumo: reportForm.resumo,
+          periodo: reportForm.periodo,
+          atividades: reportForm.atividades,
+          objetivos: reportForm.objetivos,
+          desafios: reportForm.desafios,
+        })
+      })
+      if (!res.ok) throw new Error("Erro ao criar relatório")
+      handleCloseReportModal()
+      // Atualiza a lista após criar
+      const updated = await fetch(`http://localhost:3456/relatorios/usuario/${studentData.id}`)
+      if (updated.ok) setWeeklyReports(await updated.json())
+    } catch (err) {
+      alert("Erro ao criar relatório semanal!")
+    } finally {
+      setIsSubmittingReport(false)
+    }
+  }
+
+  const handleOpenReportDetail = (report: WeeklyReport) => {
+    setSelectedReport(report)
+    setIsReportDetailOpen(true)
+  }
+  const handleCloseReportDetail = () => {
+    setIsReportDetailOpen(false)
+    setSelectedReport(null)
+  }
+
   if (isLoading) {
     return <div>Carregando...</div>
   }
@@ -427,10 +507,12 @@ export default function StudentAdminPage() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
-                  <CardTitle>Doações para Projetos</CardTitle>
-                  <CardDescription>Aqui você pode ver e gerenciar doações para projetos.</CardDescription>
+                  <CardTitle>Doações do Projeto RECOM</CardTitle>
+                  <CardDescription>
+                    Aqui você pode visualizar as doações realizadas pelo projeto RECOM para pessoas e entidades sem fins lucrativos.
+                  </CardDescription>
                 </div>
-                <CreateProjectDonationDialog userId={studentData?.id.toString()} />
+                <CreateProjectDonationDialog userId={studentData?.id?.toString() ?? ""} />
               </CardHeader>
               <CardContent>
                 {projectDonations.length > 0 ? (
@@ -593,7 +675,7 @@ export default function StudentAdminPage() {
               <CardContent>
                 <div className="text-center py-4">
                   <p>Área de descarte em desenvolvimento.</p>
-                  <CreateDisposalDialog />
+                  <CreateDisposalDialog userId={studentData?.id ? studentData.id.toString() : ""} />
                 </div>
               </CardContent>
             </Card>
@@ -609,7 +691,16 @@ export default function StudentAdminPage() {
                   <CardTitle>Gestão de Eletrônicos</CardTitle>
                   <CardDescription>Visualize e gerencie equipamentos eletrônicos disponíveis.</CardDescription>
                 </div>
-                <CreateElectronicDialog userId={studentData?.id.toString()} />
+                <Button onClick={() => setIsCreateDialogOpen(true)}>Cadastrar Eletrônico</Button>
+                <CreateElectronicDialog
+                  userId={studentData?.id ? studentData.id.toString() : ""}
+                  open={isCreateDialogOpen}
+                  onOpenChange={setIsCreateDialogOpen}
+                  onSuccess={() => {
+                    fetchElectronics();
+                    setIsCreateDialogOpen(false);
+                  }}
+                />
               </CardHeader>
               <CardContent>
                 {electronics.length > 0 ? (
@@ -667,7 +758,7 @@ export default function StudentAdminPage() {
                   <CardTitle>Relatórios Semanais</CardTitle>
                   <CardDescription>Acompanhe seus relatórios semanais de atividades.</CardDescription>
                 </div>
-                <Button>Novo Relatório</Button>
+                <Button onClick={handleOpenReportModal}>Novo Relatório</Button>
               </CardHeader>
               <CardContent>
                 {weeklyReports.length > 0 ? (
@@ -678,7 +769,6 @@ export default function StudentAdminPage() {
                         <TableHead>Título</TableHead>
                         <TableHead>Semana</TableHead>
                         <TableHead>Data de Envio</TableHead>
-                        <TableHead>Status</TableHead>
                         <TableHead>Ações</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -686,17 +776,16 @@ export default function StudentAdminPage() {
                       {weeklyReports.map((report) => (
                         <TableRow key={report.id}>
                           <TableCell>#{report.id}</TableCell>
-                          <TableCell>{report.title}</TableCell>
-                          <TableCell>{report.week}</TableCell>
+                          <TableCell>{report.name}</TableCell>
+                          <TableCell>{report.periodo}</TableCell>
                           <TableCell>
                             <div className="flex items-center">
                               <Calendar className="w-4 h-4 mr-2 text-muted-foreground" />
-                              {new Date(report.submissionDate).toLocaleDateString()}
+                              {report.createdAt ? new Date(report.createdAt).toLocaleDateString() : "N/A"}
                             </div>
                           </TableCell>
-                          <TableCell>{getStatusBadge(report.status)}</TableCell>
                           <TableCell>
-                            <Button size="sm" variant="outline">
+                            <Button size="sm" variant="outline" onClick={() => handleOpenReportDetail(report)}>
                               Ver Detalhes
                             </Button>
                           </TableCell>
@@ -788,6 +877,107 @@ export default function StudentAdminPage() {
           electronicType={selectedItem.electronicType}
         />
       )}
+      {/* Modal de novo relatório semanal */}
+      <Dialog open={isReportModalOpen} onOpenChange={setIsReportModalOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Novo Relatório Semanal</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground mb-2">
+            Preencha abaixo o seu relatório semanal de atividades realizadas no projeto RECOM. Seja detalhado sobre o que você fez nesta semana.
+          </p>
+          <div className="space-y-4">
+            <div>
+              <Label>Nome do Relatório</Label>
+              <Input name="name" value={reportForm.name} onChange={handleReportInputChange} placeholder="Ex: Relatório Semana 1" />
+            </div>
+            <div>
+              <Label>Resumo</Label>
+              <Textarea name="resumo" value={reportForm.resumo} onChange={handleReportInputChange} placeholder="Resumo geral das atividades da semana..." />
+            </div>
+            <div>
+              <Label>Período</Label>
+              <Input name="periodo" value={reportForm.periodo} onChange={handleReportInputChange} placeholder="Ex: 01/01/2024 a 07/01/2024" />
+            </div>
+            <div>
+              <Label>Atividades Desenvolvidas</Label>
+              <Textarea name="atividades" value={reportForm.atividades} onChange={handleReportInputChange} placeholder="Descreva detalhadamente as atividades realizadas..." />
+            </div>
+            <div>
+              <Label>Objetivos Alcançados</Label>
+              <Textarea name="objetivos" value={reportForm.objetivos} onChange={handleReportInputChange} placeholder="Liste os objetivos atingidos nesta semana..." />
+            </div>
+            <div>
+              <Label>Desafios Encontrados</Label>
+              <Textarea name="desafios" value={reportForm.desafios} onChange={handleReportInputChange} placeholder="Relate os principais desafios enfrentados..." />
+            </div>
+            <div className="flex justify-end gap-2 mt-4">
+              <Button variant="outline" onClick={handleCloseReportModal} disabled={isSubmittingReport}>Cancelar</Button>
+              <Button
+                onClick={handleCreateReport}
+                disabled={
+                  isSubmittingReport ||
+                  !reportForm.name ||
+                  !reportForm.resumo ||
+                  !reportForm.periodo ||
+                  !reportForm.atividades ||
+                  !reportForm.objetivos ||
+                  !reportForm.desafios
+                }
+              >
+                {isSubmittingReport ? "Salvando..." : "Salvar"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+      {/* Modal de detalhes do relatório semanal */}
+      <Dialog open={isReportDetailOpen} onOpenChange={setIsReportDetailOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Detalhes do Relatório Semanal</DialogTitle>
+          </DialogHeader>
+          {selectedReport && (
+            <div className="space-y-4">
+              <div>
+                <Label className="font-bold">Nome</Label>
+                <div>{selectedReport.name}</div>
+              </div>
+              <div>
+                <Label className="font-bold">Resumo</Label>
+                <div>{selectedReport.resumo}</div>
+              </div>
+              <div>
+                <Label className="font-bold">Período</Label>
+                <div>{selectedReport.periodo}</div>
+              </div>
+              <div>
+                <Label className="font-bold">Atividades Desenvolvidas</Label>
+                <div>{selectedReport.atividades}</div>
+              </div>
+              <div>
+                <Label className="font-bold">Objetivos Alcançados</Label>
+                <div>{selectedReport.objetivos}</div>
+              </div>
+              <div>
+                <Label className="font-bold">Desafios Encontrados</Label>
+                <div>{selectedReport.desafios}</div>
+              </div>
+              <div>
+                <Label className="font-bold">Feedback</Label>
+                <div>{selectedReport.feedback || "Nenhum feedback ainda."}</div>
+              </div>
+              <div>
+                <Label className="font-bold">Data de Envio</Label>
+                <div>{selectedReport.createdAt ? new Date(selectedReport.createdAt).toLocaleDateString() : "N/A"}</div>
+              </div>
+              <div className="flex justify-end mt-4">
+                <Button variant="outline" onClick={handleCloseReportDetail}>Fechar</Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

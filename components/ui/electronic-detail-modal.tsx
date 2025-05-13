@@ -41,102 +41,71 @@ export function ElectronicDetailModal({ isOpen, onClose, electronicId, electroni
   const [newStatus, setNewStatus] = useState("")
 
   useEffect(() => {
-    if (isOpen && electronicId) {
+    if (isOpen && electronicId && electronicType) {
       setLoading(true)
-      // Simulação de carregamento de dados
-      setTimeout(() => {
-        // Dados simulados com base no tipo de eletrônico
-        const type = electronicType || ["notebook", "monitor", "desktop", "impressora", "tablet"][electronicId % 5]
+      const fetchDetails = async () => {
+        try {
+          console.log('electronicType recebido no modal:', electronicType);
+          // Mapear o tipo para o endpoint correto
+          const typeToEndpoint: Record<string, string> = {
+            estabilizador: 'estabilizadores',
+            estabilizadores: 'estabilizadores',
+            fonteDeAlimentacao: 'fontesDeAlimentacao',
+            fontesDeAlimentacao: 'fontesDeAlimentacao',
+            gabinete: 'gabinetes',
+            gabinetes: 'gabinetes',
+            hd: 'hds',
+            hds: 'hds',
+            impressora: 'impressoras',
+            impressoras: 'impressoras',
+            monitor: 'monitores',
+            monitores: 'monitores',
+            notebook: 'notebooks',
+            notebooks: 'notebooks',
+            placaMae: 'placasMae',
+            placasMae: 'placasMae',
+            processador: 'processadores',
+            processadores: 'processadores',
+            teclado: 'teclados',
+            teclados: 'teclados',
+          };
+          const normalizedType = (electronicType || '').toLowerCase().replace(/\s/g, '');
+          const endpoint = typeToEndpoint[normalizedType] || `${normalizedType}s`;
+          // Buscar dados do eletrônico
+          const res = await fetch(`http://localhost:3456/${endpoint}/${electronicId}`)
+          if (!res.ok) throw new Error('Erro ao buscar detalhes do eletrônico')
+          const data = await res.json()
 
-        const mockDetails: ElectronicDetails = {
-          id: electronicId,
-          name:
-            type === "notebook"
-              ? "Laptop Dell Latitude E6440"
-              : type === "monitor"
-                ? 'Monitor LG 24" LED'
-                : type === "desktop"
-                  ? "Desktop HP EliteDesk 800"
-                  : type === "impressora"
-                    ? "Impressora Brother MFC-L2740DW"
-                    : "Tablet Samsung Galaxy Tab A",
-          type: type,
-          serialNumber:
-            type === "notebook"
-              ? "DL7890123"
-              : type === "monitor"
-                ? "LG1234567"
-                : type === "desktop"
-                  ? "HP4567890"
-                  : type === "impressora"
-                    ? "BR7654321"
-                    : "SM9876543",
-          model:
-            type === "notebook"
-              ? "Latitude E6440"
-              : type === "monitor"
-                ? "24MP55"
-                : type === "desktop"
-                  ? "EliteDesk 800 G1"
-                  : type === "impressora"
-                    ? "MFC-L2740DW"
-                    : "Galaxy Tab A 10.1",
-          brand:
-            type === "notebook"
-              ? "Dell"
-              : type === "monitor"
-                ? "LG"
-                : type === "desktop"
-                  ? "HP"
-                  : type === "impressora"
-                    ? "Brother"
-                    : "Samsung",
-          condition:
-            type === "notebook"
-              ? "Funcional - Bateria fraca"
-              : type === "monitor"
-                ? "Funcional - Perfeito"
-                : type === "desktop"
-                  ? "Funcional - Completo"
-                  : type === "impressora"
-                    ? "Necessita reparo - Sem toner"
-                    : "Funcional - Tela trincada",
-          origin: [
-            "Doação - Empresa XYZ",
-            "Doação - Carlos Eduardo",
-            "Doação - Instituto Tecnologia",
-            "Doação - Escola Municipal",
-            "Doação - Ana Beatriz",
-          ][electronicId % 5],
-          receivedDate: new Date(2023, 3, 25 + electronicId).toISOString(),
-          specifications:
-            type === "notebook"
-              ? "Intel Core i5-4300M, 8GB RAM, 256GB SSD, Windows 10 Pro"
-              : type === "monitor"
-                ? "24 polegadas, Full HD (1920x1080), 60Hz, IPS"
-                : type === "desktop"
-                  ? "Intel Core i7-4770, 16GB RAM, 500GB HDD, Windows 10 Pro"
-                  : type === "impressora"
-                    ? "Multifuncional Laser, Wi-Fi, Duplex"
-                    : "10.1 polegadas, 32GB, Android 9.0",
-          additionalInfo:
-            type === "notebook"
-              ? "Equipamento em bom estado, necessita apenas de nova bateria. Acompanha carregador original."
-              : type === "monitor"
-                ? "Monitor sem riscos ou dead pixels, acompanha cabo de alimentação e cabo HDMI."
-                : type === "desktop"
-                  ? "Computador completo com teclado, mouse e monitor. Necessita apenas de limpeza interna."
-                  : type === "impressora"
-                    ? "Impressora em bom estado, necessita apenas de novo toner. Acompanha cabo USB."
-                    : "Tablet com pequena trinca no canto superior direito, não afeta o funcionamento. Acompanha carregador.",
-          status: ["Disponível", "Reservado", "Em manutenção", "Em avaliação", "Disponível"][electronicId % 5],
-          image: "/placeholder.svg?height=200&width=200",
+          // Buscar imagem
+          let imgUrl = null
+          try {
+            const imgRes = await fetch(`http://localhost:3456/imagens/${electronicType}/${electronicId}`)
+            if (imgRes.ok) {
+              const imgData = await imgRes.json()
+              let caminho = null
+              if (Array.isArray(imgData) && imgData.length > 0) {
+                caminho = imgData[0].url
+              } else if (imgData && imgData.url) {
+                caminho = imgData.url
+              }
+              if (caminho) {
+                let finalPath = caminho.startsWith('/') ? caminho : `/${caminho}`
+                imgUrl = `http://localhost:3456${finalPath}`
+              }
+            }
+          } catch {}
+
+          setDetails({
+            ...data,
+            image: imgUrl,
+          })
+        } catch (err) {
+          setDetails(null)
+        } finally {
+          setLoading(false)
         }
-
-        setDetails(mockDetails)
-        setNewStatus(mockDetails.status)
-        setLoading(false)
-      }, 1000)
+      }
+      fetchDetails()
     }
   }, [isOpen, electronicId, electronicType])
 
@@ -213,6 +182,9 @@ export function ElectronicDetailModal({ isOpen, onClose, electronicId, electroni
                 <DialogTitle>{details.name}</DialogTitle>
                 {details.status && getStatusBadge(details.status)}
               </div>
+              <DialogDescription>
+                Veja as informações detalhadas deste equipamento eletrônico.
+              </DialogDescription>
               <DialogDescription>
                 ID: #{details.id} | Tipo: {details.type.charAt(0).toUpperCase() + details.type.slice(1)}
               </DialogDescription>

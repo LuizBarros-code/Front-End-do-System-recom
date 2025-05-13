@@ -22,7 +22,7 @@ interface UserData {
   comprovanteDeProjeto?: string
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3456"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://26.99.103.209:3456"
 
 export default function Profile() {
   const [userData, setUserData] = useState<UserData | null>(null)

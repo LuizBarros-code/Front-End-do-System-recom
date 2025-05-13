@@ -24,7 +24,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle, Loader2 } from "lucide-react"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3456"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://26.99.103.209:3456"
 
 type UserType = "STUDENT" | "PHYSICAL" | "LEGAL"
 

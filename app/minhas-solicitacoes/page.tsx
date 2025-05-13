@@ -36,7 +36,7 @@ export default function MyRequestsPage() {
   const [userData, setUserData] = useState<UserData | null>(null)
   const [userType, setUserType] = useState<"pessoaFisicas" | "pessoaJuridicas" | null>(null)
 
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3456"
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://26.99.103.209:3456"
 
   useEffect(() => {
     const checkAuth = async () => {

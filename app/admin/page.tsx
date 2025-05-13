@@ -678,7 +678,6 @@ export default function CoordinatorAdminPage() {
   const [disposalStats, setDisposalStats] = useState({
     total: 0,
     thisMonth: 0,
-    completedPercentage: 0,
     monthlyData: {} as Record<string, number>,
   })
   // Adicione estes estados dentro da função CoordinatorAdminPage
@@ -706,7 +705,7 @@ export default function CoordinatorAdminPage() {
     ]),
   )
 
-  const API_URL = "http://localhost:3456"
+  const API_URL = "http://26.99.103.209:3456"
 
   useEffect(() => {
     // Check if user is logged in as coordinator
@@ -758,7 +757,7 @@ export default function CoordinatorAdminPage() {
           fetch(`${API_URL}/doacoes`),
           fetch(`${API_URL}/doacoesUsuarios`),
           fetch(`${API_URL}/solicitacoes`),
-          fetch(`${API_URL}/inscritos`),
+          fetch(`http://localhost:3456/inscritos`),
         ])
 
         if (projectDonationsRes.ok && userDonationsRes.ok && studentRequestsRes.ok && studentsRes.ok) {
@@ -901,7 +900,7 @@ export default function CoordinatorAdminPage() {
     const fetchDonationsData = async () => {
       try {
         setDonationsLoading(true)
-        const response = await fetch(`${API_URL}/doacoes`)
+        const response = await fetch(`http://localhost:3456/doacoes`)
 
         if (response.ok) {
           const donationsData: DonationData[] = await response.json()
@@ -909,15 +908,13 @@ export default function CoordinatorAdminPage() {
 
           // Calculate statistics
           const totalDonations = donationsData.length
-          const pessoaFisicaDonations = donationsData.filter((d) => d.usuariofisicoId).length
-          const pessoaJuridicaDonations = donationsData.filter((d) => d.usuariojuridicoId).length
-          const approvedDonations = donationsData.filter((d) => d.status === "APPROVED").length
+          const pessoaFisicaDonations = donationsData.filter((d) => d.usuariofisicoId !== null).length
+          const pessoaJuridicaDonations = donationsData.filter((d) => d.usuariojuridicoId !== null).length
 
           setDonationsStats({
             total: totalDonations,
             pessoaFisica: pessoaFisicaDonations,
             pessoaJuridica: pessoaJuridicaDonations,
-            approvalRate: totalDonations > 0 ? Math.round((approvedDonations / totalDonations) * 100) : 0,
           })
 
           // Fetch donor information for each donation
@@ -984,7 +981,7 @@ export default function CoordinatorAdminPage() {
     const fetchDisposalsData = async () => {
       try {
         setDisposalsLoading(true)
-        const response = await fetch(`${API_URL}/descartes`)
+        const response = await fetch(`http://localhost:3456/descartes`)
 
         if (response.ok) {
           const disposalsData: DisposalData[] = await response.json()
@@ -992,33 +989,32 @@ export default function CoordinatorAdminPage() {
 
           // Calculate statistics
           const totalDisposals = disposalsData.length
-          const currentMonth = new Date().getMonth()
-          const currentYear = new Date().getFullYear()
-          const thisMonthDisposals = disposalsData.filter((d) => {
-            const date = new Date(d.data)
-            return date.getMonth() === currentMonth && date.getFullYear() === currentYear
-          }).length
-          const completedDisposals = disposalsData.filter(
-            (d) => d.status === "COMPLETED" || d.status === "Concluído",
-          ).length
+          // Mês e ano selecionados
+          const selectedMonthNumber = selectedMonth;
+          const selectedYearNumber = selectedYear;
 
-          // Calculate monthly data
-          const monthlyData: Record<string, number> = {}
+          // Descartes do mês/ano selecionados
+          const thisMonthDisposals = disposalsData.filter((d) => {
+            const date = new Date(d.data);
+            return date.getMonth() === selectedMonthNumber && date.getFullYear() === selectedYearNumber;
+          }).length;
+
+          // Calcular descartes por mês/ano
+          const monthlyData: Record<string, number> = {};
           disposalsData.forEach((disposal) => {
-            const date = new Date(disposal.data)
-            const monthYear = `${date.getMonth()}-${date.getFullYear()}`
+            const date = new Date(disposal.data);
+            const monthYear = `${date.getMonth()}-${date.getFullYear()}`;
             if (!monthlyData[monthYear]) {
-              monthlyData[monthYear] = 0
+              monthlyData[monthYear] = 0;
             }
-            monthlyData[monthYear]++
-          })
+            monthlyData[monthYear]++;
+          });
 
           setDisposalStats({
             total: totalDisposals,
             thisMonth: thisMonthDisposals,
-            completedPercentage: totalDisposals > 0 ? Math.round((completedDisposals / totalDisposals) * 100) : 0,
             monthlyData,
-          })
+          });
 
           // Fetch student information for each disposal
           const studentInfoMap = new Map<number, StudentInfo>()
@@ -1062,46 +1058,47 @@ export default function CoordinatorAdminPage() {
     }
 
     fetchDisposalsData()
-  }, [])
+  }, [selectedMonth, selectedYear])
 
+  // Atualizar para buscar eletrônicos de todas as rotas fornecidas e calcular o total
   useEffect(() => {
     const fetchElectronics = async () => {
       try {
         const endpoints = [
-          { url: "estabilizadores", type: "estabilizador" },
-          { url: "fontesDeAlimentacao", type: "fonte" },
-          { url: "gabinetes", type: "gabinete" },
-          { url: "hds", type: "hd" },
-          { url: "impressoras", type: "impressora" },
-          { url: "monitores", type: "monitor" },
-          { url: "notebooks", type: "notebook" },
-          { url: "placasMae", type: "placa mãe" },
-          { url: "processadores", type: "processador" },
-          { url: "teclados", type: "teclado" },
-        ]
+          { url: "estabilizadores", type: "Estabilizador" },
+          { url: "fontesDeAlimentacao", type: "Fonte de Alimentação" },
+          { url: "gabinetes", type: "Gabinete" },
+          { url: "hds", type: "HD" },
+          { url: "impressoras", type: "Impressora" },
+          { url: "monitores", type: "Monitor" },
+          { url: "notebooks", type: "Notebook" },
+          { url: "placasMae", type: "Placa Mãe" },
+          { url: "processadores", type: "Processador" },
+          { url: "teclados", type: "Teclado" },
+        ];
 
         const responses = await Promise.all(
           endpoints.map((endpoint) =>
-            fetch(`${API_URL}/${endpoint.url}`).then(async (res) => {
+            fetch(`http://localhost:3456/${endpoint.url}`).then(async (res) => {
               if (res.ok) {
-                const data = await res.json()
-                // Add the endpoint type to each item for reference
-                return data.map((item: any) => ({ ...item, endpointType: endpoint.type }))
+                const data = await res.json();
+                // Adiciona o tipo para cada item
+                return data.map((item: any) => ({ ...item, tipo: endpoint.type }));
               }
-              return []
-            }),
-          ),
-        )
+              return [];
+            })
+          )
+        );
 
-        const allElectronics = responses.flat()
-        setElectronics(allElectronics)
+        const allElectronics = responses.flat();
+        setElectronics(allElectronics);
       } catch (error) {
-        console.error("Error fetching electronics:", error)
+        console.error("Error fetching electronics:", error);
       }
-    }
+    };
 
-    fetchElectronics()
-  }, [])
+    fetchElectronics();
+  }, []);
 
   // Resetar filtros quando mudar de tipo
   useEffect(() => {
@@ -1127,17 +1124,27 @@ export default function CoordinatorAdminPage() {
     }
   }
 
-  const getStatusBadge = (status: string) => {
+  // Função utilitária para normalizar status (igual do modal)
+  function normalizeStatus(status: string | undefined) {
+    if (!status) return '';
+    const s = status.trim().toUpperCase();
+    if (["PENDING", "PENDENTE"].includes(s)) return "PENDING";
+    if (["APPROVED", "APROVADO"].includes(s)) return "APPROVED";
+    if (["REJECTED", "REJEITADO"].includes(s)) return "REJECTED";
+    return s;
+  }
+
+  // Função para exibir o badge de status em português
+  const getStatusBadgePT = (status: string) => {
+    const normalized = normalizeStatus(status);
     const variants = {
       PENDING: { variant: "default", label: "Pendente" },
       APPROVED: { variant: "success", label: "Aprovado" },
-      REJECTED: { variant: "destructive", label: "Rejeitado" },
-      NEW: { variant: "secondary", label: "Novo" },
-      IN_PROGRESS: { variant: "default", label: "Em Andamento" },
-    }
-    const statusInfo = variants[status as keyof typeof variants] || variants.PENDING
-    return <Badge variant={statusInfo.variant as any}>{statusInfo.label}</Badge>
-  }
+      REJECTED: { variant: "destructive", label: "Reprovado" },
+    };
+    const statusInfo = variants[normalized as keyof typeof variants] || { variant: "secondary", label: status };
+    return <Badge variant={statusInfo.variant as any}>{statusInfo.label}</Badge>;
+  };
 
   const handleLogout = () => {
     localStorage.removeItem("userMatricula")
@@ -1343,20 +1350,24 @@ export default function CoordinatorAdminPage() {
   // Função para filtrar os alunos com base no termo de pesquisa e status
   const getFilteredStudents = () => {
     return students.filter((student) => {
-      // Filtro de pesquisa
+      // Filtro de pesquisa (case-insensitive)
       const matchesSearch =
         searchTerm === "" ||
         student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         student.matricula.toLowerCase().includes(searchTerm.toLowerCase()) ||
         student.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        student.curso.toLowerCase().includes(searchTerm.toLowerCase())
+        student.curso.toLowerCase().includes(searchTerm.toLowerCase());
 
-      // Filtro de status
-      const matchesStatus = statusFilter === "all" || student.status === statusFilter
+      // Filtro de status (normalizado)
+      const normalizedStudentStatus = normalizeStatus(student.status);
+      const normalizedFilterStatus = normalizeStatus(statusFilter);
+      const matchesStatus =
+        statusFilter === "all" ||
+        (normalizedFilterStatus !== '' && normalizedStudentStatus === normalizedFilterStatus);
 
       // Retorna true se o aluno corresponder a ambos os filtros
-      return matchesSearch && matchesStatus
-    })
+      return matchesSearch && matchesStatus;
+    });
   }
 
   // Adicione estas funções de filtragem logo após a função getFilteredStudents()
@@ -1495,6 +1506,21 @@ export default function CoordinatorAdminPage() {
     })
   }
 
+  // Função para atualizar a lista de inscritos
+  const handleRefreshInscritos = async () => {
+    try {
+      const response = await fetch('http://localhost:3456/inscritos');
+      if (response.ok) {
+        const data = await response.json();
+        setStudents(data);
+      } else {
+        console.error('Erro ao atualizar lista de inscritos');
+      }
+    } catch (error) {
+      console.error('Erro ao atualizar lista de inscritos:', error);
+    }
+  };
+
   if (isLoading) {
     return <div>Carregando...</div>
   }
@@ -1584,7 +1610,7 @@ export default function CoordinatorAdminPage() {
                               {new Date(donation.data).toLocaleDateString()}
                             </div>
                           </TableCell>
-                          <TableCell>{getStatusBadge(donation.status)}</TableCell>
+                          <TableCell>{getStatusBadgePT(donation.status)}</TableCell>
                           <TableCell>
                             <Button size="sm" variant="outline" onClick={() => handleOpenModal(donation.id, "project")}>
                               Ver Detalhes
@@ -1643,7 +1669,7 @@ export default function CoordinatorAdminPage() {
                               {new Date(request.data).toLocaleDateString()}
                             </div>
                           </TableCell>
-                          <TableCell>{getStatusBadge(request.status)}</TableCell>
+                          <TableCell>{getStatusBadgePT(request.status)}</TableCell>
                           <TableCell>
                             <Button size="sm" variant="outline" onClick={() => handleOpenModal(request.id, "request")}>
                               Ver Detalhes
@@ -1711,7 +1737,7 @@ export default function CoordinatorAdminPage() {
                               {new Date(report.submissionDate).toLocaleDateString()}
                             </div>
                           </TableCell>
-                          <TableCell>{getStatusBadge(report.status)}</TableCell>
+                          <TableCell>{getStatusBadgePT(report.status)}</TableCell>
                           <TableCell>
                             <Button size="sm" variant="outline" onClick={() => handleOpenReportModal(report.id)}>
                               Avaliar
@@ -1767,7 +1793,7 @@ export default function CoordinatorAdminPage() {
                               {new Date(mission.deadline).toLocaleDateString()}
                             </div>
                           </TableCell>
-                          <TableCell>{getStatusBadge(mission.status)}</TableCell>
+                          <TableCell>{getStatusBadgePT(mission.status)}</TableCell>
                           <TableCell>
                             <Button size="sm" variant="outline" onClick={() => handleOpenEditMissionModal(mission.id)}>
                               Editar
@@ -1795,7 +1821,7 @@ export default function CoordinatorAdminPage() {
                   <CardTitle>Alunos Inscritos</CardTitle>
                   <CardDescription>Gerencie os alunos inscritos no programa.</CardDescription>
                 </div>
-                <Button variant="outline">Exportar Lista</Button>
+                <Button variant="outline" onClick={handleRefreshInscritos}>Atualizar</Button>
               </CardHeader>
               <CardContent>
                 <Table>
@@ -1824,7 +1850,7 @@ export default function CoordinatorAdminPage() {
                         <TableCell>{student.periodo}</TableCell>
                         <TableCell>{student.dias}</TableCell>
                         <TableCell>{student.bolsistaTipo || "N/A"}</TableCell>
-                        <TableCell>{getStatusBadge(student.status)}</TableCell>
+                        <TableCell>{getStatusBadgePT(student.status)}</TableCell>
                         <TableCell>
                           <Button size="sm" variant="outline" onClick={() => handleOpenStudentModal(student)}>
                             Ver Detalhes
@@ -1869,7 +1895,7 @@ export default function CoordinatorAdminPage() {
                     </div>
                   ) : (
                     <div className="space-y-6">
-                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 mb-6">
                         <Card>
                           <CardContent className="pt-6">
                             <div className="text-center">
@@ -1891,14 +1917,6 @@ export default function CoordinatorAdminPage() {
                             <div className="text-center">
                               <div className="text-2xl font-bold">{donationsStats.pessoaJuridica}</div>
                               <p className="text-xs text-muted-foreground">Pessoa Jurídica</p>
-                            </div>
-                          </CardContent>
-                        </Card>
-                        <Card>
-                          <CardContent className="pt-6">
-                            <div className="text-center">
-                              <div className="text-2xl font-bold">{donationsStats.approvalRate}%</div>
-                              <p className="text-xs text-muted-foreground">Taxa de Aprovação</p>
                             </div>
                           </CardContent>
                         </Card>
@@ -1964,7 +1982,7 @@ export default function CoordinatorAdminPage() {
                                     <TableCell>{donorInfo.tipo}</TableCell>
                                     <TableCell>{getEquipmentDescription(donation)}</TableCell>
                                     <TableCell>{countEquipmentItems(donation)}</TableCell>
-                                    <TableCell>{getStatusBadge(donation.status)}</TableCell>
+                                    <TableCell>{getStatusBadgePT(donation.status)}</TableCell>
                                     <TableCell>
                                       <Button
                                         size="sm"
@@ -2008,29 +2026,17 @@ export default function CoordinatorAdminPage() {
                     </div>
                   ) : (
                     <div className="space-y-6">
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <Card>
-                          <CardContent className="pt-6">
-                            <div className="text-center">
-                              <div className="text-2xl font-bold">{disposalStats.total}</div>
-                              <p className="text-xs text-muted-foreground">Total de Descartes</p>
-                            </div>
+                      <div className="flex flex-wrap justify-center gap-6 mb-8 mt-2">
+                        <Card className="w-64 shadow-sm">
+                          <CardContent className="py-6 px-2 flex flex-col items-center justify-center">
+                            <div className="text-2xl font-bold">{disposalStats.total}</div>
+                            <p className="text-xs text-muted-foreground mt-1">Total de Descartes</p>
                           </CardContent>
                         </Card>
-                        <Card>
-                          <CardContent className="pt-6">
-                            <div className="text-center">
-                              <div className="text-2xl font-bold">{disposalStats.thisMonth}</div>
-                              <p className="text-xs text-muted-foreground">Descartes este Mês</p>
-                            </div>
-                          </CardContent>
-                        </Card>
-                        <Card>
-                          <CardContent className="pt-6">
-                            <div className="text-center">
-                              <div className="text-2xl font-bold">{disposalStats.completedPercentage}%</div>
-                              <p className="text-xs text-muted-foreground">Concluídos</p>
-                            </div>
+                        <Card className="w-64 shadow-sm">
+                          <CardContent className="py-6 px-2 flex flex-col items-center justify-center">
+                            <div className="text-2xl font-bold">{disposalStats.thisMonth}</div>
+                            <p className="text-xs text-muted-foreground mt-1">Descartes este Mês</p>
                           </CardContent>
                         </Card>
                       </div>
@@ -2038,42 +2044,59 @@ export default function CoordinatorAdminPage() {
                       <div className="mb-6">
                         <div className="flex justify-between items-center mb-4">
                           <h3 className="text-lg font-medium">Descartes por Mês</h3>
-                          <Select defaultValue="2023">
+                          <Select defaultValue={selectedYear.toString()} value={selectedYear.toString()} onValueChange={(value) => setSelectedYear(Number.parseInt(value))}>
                             <SelectTrigger className="w-[120px]">
                               <SelectValue placeholder="Ano" />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="2023">2023</SelectItem>
-                              <SelectItem value="2022">2022</SelectItem>
-                              <SelectItem value="2021">2021</SelectItem>
+                              {[2023, 2024, 2025].map((year) => (
+                                <SelectItem key={year} value={year.toString()}>
+                                  {year}
+                                </SelectItem>
+                              ))}
                             </SelectContent>
                           </Select>
                         </div>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                          {["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho"].map((month, index) => {
-                            // Get month number (0-based)
-                            const monthIndex = index
-                            // Count disposals for this month in the current year
-                            const monthYear = `${monthIndex}-${selectedYear}`
-                            const disposalCount = disposalStats.monthlyData[monthYear] || 0
-
-                            return (
-                              <Button
-                                key={index}
-                                variant="outline"
-                                className={`h-auto py-6 flex flex-col items-center justify-center ${
-                                  activeMonth === month ? "border-primary" : ""
-                                }`}
-                                onClick={() => setActiveMonth(month)}
-                              >
-                                <span className="text-lg font-bold">{month}</span>
-                                <span className="text-sm text-muted-foreground mt-1">{selectedYear}</span>
-                                <span className="text-xs bg-primary/10 px-2 py-1 rounded-full mt-2">
-                                  {disposalCount} descartes
-                                </span>
-                              </Button>
-                            )
-                          })}
+                          {(() => {
+                            const now = new Date();
+                            const months = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+                            const currentMonth = now.getMonth();
+                            const currentYear = now.getFullYear();
+                            let monthsToShow: { monthIndex: number, year: number }[] = [];
+                            for (let i = 0; i < 4; i++) {
+                              let monthIndex = currentMonth - i;
+                              let year = currentYear;
+                              if (monthIndex < 0) {
+                                monthIndex += 12;
+                                year--;
+                              }
+                              monthsToShow.push({ monthIndex, year });
+                            }
+                            // Filtrar apenas os meses do ano selecionado
+                            monthsToShow = monthsToShow.filter(m => m.year === selectedYear);
+                            // Ordenar do mais antigo para o mais recente
+                            monthsToShow.sort((a, b) => a.year !== b.year ? a.year - b.year : a.monthIndex - b.monthIndex);
+                            return monthsToShow.map(({ monthIndex, year }) => {
+                              const monthYear = `${monthIndex}-${year}`;
+                              const disposalCount = disposalStats.monthlyData[monthYear] || 0;
+                              const monthName = months[monthIndex];
+                              return (
+                                <Button
+                                  key={monthYear}
+                                  variant="outline"
+                                  className={`h-auto py-6 flex flex-col items-center justify-center ${activeMonth === monthName ? "border-primary" : ""}`}
+                                  onClick={() => setActiveMonth(monthName)}
+                                >
+                                  <span className="text-lg font-bold">{monthName}</span>
+                                  <span className="text-sm text-muted-foreground mt-1">{year}</span>
+                                  <span className="text-xs bg-primary/10 px-2 py-1 rounded-full mt-2">
+                                    {disposalCount} descartes
+                                  </span>
+                                </Button>
+                              );
+                            });
+                          })()}
                         </div>
                       </div>
 
@@ -2186,11 +2209,11 @@ export default function CoordinatorAdminPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 mb-6">
                       <Card>
                         <CardContent className="pt-6">
                           <div className="text-center">
-                            <div className="text-2xl font-bold">342</div>
+                            <div className="text-2xl font-bold">{electronics.length}</div>
                             <p className="text-xs text-muted-foreground">Total de Equipamentos</p>
                           </div>
                         </CardContent>
@@ -2395,7 +2418,7 @@ export default function CoordinatorAdminPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 mb-6">
                       <Card>
                         <CardContent className="pt-6">
                           <div className="text-center">
@@ -2414,20 +2437,6 @@ export default function CoordinatorAdminPage() {
                               }
                             </div>
                             <p className="text-xs text-muted-foreground">Doações este Mês</p>
-                          </div>
-                        </CardContent>
-                      </Card>
-                      <Card>
-                        <CardContent className="pt-6">
-                          <div className="text-center">
-                            <div className="text-2xl font-bold">
-                              {Math.round(
-                                (userDonations.filter((d) => d.status === "APPROVED").length / userDonations.length) *
-                                  100,
-                              ) || 0}
-                              %
-                            </div>
-                            <p className="text-xs text-muted-foreground">Taxa de Aprovação</p>
                           </div>
                         </CardContent>
                       </Card>
@@ -2480,7 +2489,7 @@ export default function CoordinatorAdminPage() {
                                   {new Date(donation.data).toLocaleDateString()}
                                 </div>
                               </TableCell>
-                              <TableCell>{getStatusBadge(donation.status)}</TableCell>
+                              <TableCell>{getStatusBadgePT(donation.status)}</TableCell>
                               <TableCell>
                                 <Button
                                   size="sm"

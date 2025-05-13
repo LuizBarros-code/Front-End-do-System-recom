@@ -3,10 +3,14 @@
 import { useState, useEffect } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { Loader2, Calendar, Tag, Info, Clock, Package, Cpu, HardDrive } from "lucide-react"
+import { Loader2, Calendar, Tag, Info, Clock, Package, Cpu, HardDrive, Check } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Card, CardContent } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select"
+import { toast } from "@/components/ui/use-toast"
 
 interface DetailModalProps {
   isOpen: boolean
@@ -20,6 +24,9 @@ export function DetailModal({ isOpen, onClose, itemId, itemType, electronicType 
   const [data, setData] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [pendingStatus, setPendingStatus] = useState<string | null>(null)
+  const [pendingSituacao, setPendingSituacao] = useState<string | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
 
   useEffect(() => {
     if (isOpen) {
@@ -34,51 +41,51 @@ export function DetailModal({ isOpen, onClose, itemId, itemType, electronicType 
       let url = ""
       switch (itemType) {
         case "project":
-          url = `http://localhost:3456/doacoes/${itemId}`
+          url = `http://26.99.103.209:3456/doacoes/${itemId}`
           break
         case "user":
-          url = `http://localhost:3456/doacoesUsuarios/${itemId}`
+          url = `http://26.99.103.209:3456/doacoesUsuarios/${itemId}`
           break
         case "request":
-          url = `http://localhost:3456/solicitacoes/${itemId}`
+          url = `http://26.99.103.209:3456/solicitacoes/${itemId}`
           break
         case "disposal":
-          url = `http://localhost:3456/descartes/${itemId}`
+          url = `http://26.99.103.209:3456/descartes/${itemId}`
           break
         case "electronic":
           if (electronicType) {
             switch (electronicType.toLowerCase()) {
               case "estabilizador":
-                url = `http://localhost:3456/estabilizadores/${itemId}`
+                url = `http://26.99.103.209:3456/estabilizadores/${itemId}`
                 break
               case "fonte":
               case "fonte de alimentação":
-                url = `http://localhost:3456/fontesDeAlimentacao/${itemId}`
+                url = `http://26.99.103.209:3456/fontesDeAlimentacao/${itemId}`
                 break
               case "gabinete":
-                url = `http://localhost:3456/gabinetes/${itemId}`
+                url = `http://26.99.103.209:3456/gabinetes/${itemId}`
                 break
               case "hd":
-                url = `http://localhost:3456/hds/${itemId}`
+                url = `http://26.99.103.209:3456/hds/${itemId}`
                 break
               case "impressora":
-                url = `http://localhost:3456/impressoras/${itemId}`
+                url = `http://26.99.103.209:3456/impressoras/${itemId}`
                 break
               case "monitor":
-                url = `http://localhost:3456/monitores/${itemId}`
+                url = `http://26.99.103.209:3456/monitores/${itemId}`
                 break
               case "notebook":
-                url = `http://localhost:3456/notebooks/${itemId}`
+                url = `http://26.99.103.209:3456/notebooks/${itemId}`
                 break
               case "placa mãe":
               case "placa mae":
-                url = `http://localhost:3456/placasMae/${itemId}`
+                url = `http://26.99.103.209:3456/placasMae/${itemId}`
                 break
               case "processador":
-                url = `http://localhost:3456/processadores/${itemId}`
+                url = `http://26.99.103.209:3456/processadores/${itemId}`
                 break
               case "teclado":
-                url = `http://localhost:3456/teclados/${itemId}`
+                url = `http://26.99.103.209:3456/teclados/${itemId}`
                 break
               default:
                 throw new Error(`Tipo de eletrônico não reconhecido: ${electronicType}`)
@@ -96,20 +103,49 @@ export function DetailModal({ isOpen, onClose, itemId, itemType, electronicType 
         throw new Error(`Erro ao buscar dados: ${response.status}`)
       }
       const jsonData = await response.json()
+
+      // Se for eletrônico, buscar imagem
+      if (itemType === "electronic" && electronicType) {
+        // Mapear o tipo para o endpoint correto
+        const typeToEndpoint: Record<string, string> = {
+          estabilizador: "estabilizado",
+          "fonte de alimentação": "fonteDeAlimentacao",
+          fonte: "fonteDeAlimentacao",
+          gabinete: "gabinete",
+          hd: "hd",
+          impressora: "impressora",
+          monitor: "monitor",
+          notebook: "notebook",
+          "placa mãe": "placaMae",
+          "placa mae": "placaMae",
+          processador: "processador",
+          teclado: "teclado",
+        }
+        const endpoint = typeToEndpoint[electronicType.toLowerCase()]
+        if (endpoint) {
+          const imgRes = await fetch(`http://localhost:3456/imagens/${endpoint}/${itemId}`)
+          if (imgRes.ok) {
+            const images = await imgRes.json()
+            if (images && images[0]?.url) {
+              jsonData.imagem = `http://localhost:3456${images[0].url}`
+            }
+          }
+        }
+      }
       setData(jsonData)
 
       // Fetch additional data for project donations
       if (itemType === "project") {
-        const donatorResponse = await fetch(`http://localhost:3456/alunos/${jsonData.donatarioId}`)
+        const donatorResponse = await fetch(`http://26.99.103.209:3456/alunos/${jsonData.donatarioId}`)
         const donatorData = await donatorResponse.json()
         setData((prevData: any) => ({ ...prevData, donator: donatorData }))
 
         if (jsonData.usuariofisicoId) {
-          const receiverResponse = await fetch(`http://localhost:3456/pessoasFisicas/${jsonData.usuariofisicoId}`)
+          const receiverResponse = await fetch(`http://26.99.103.209:3456/pessoasFisicas/${jsonData.usuariofisicoId}`)
           const receiverData = await receiverResponse.json()
           setData((prevData: any) => ({ ...prevData, receiver: receiverData }))
         } else if (jsonData.usuariojuridicoId) {
-          const receiverResponse = await fetch(`http://localhost:3456/pessoasJuridicas/${jsonData.usuariojuridicoId}`)
+          const receiverResponse = await fetch(`http://26.99.103.209:3456/pessoasJuridicas/${jsonData.usuariojuridicoId}`)
           const receiverData = await receiverResponse.json()
           setData((prevData: any) => ({ ...prevData, receiver: receiverData }))
         }
@@ -118,11 +154,11 @@ export function DetailModal({ isOpen, onClose, itemId, itemType, electronicType 
       // Fetch additional data for user donations
       if (itemType === "user") {
         if (jsonData.donatariofisicoId) {
-          const donatorResponse = await fetch(`http://localhost:3456/pessoasFisicas/${jsonData.donatariofisicoId}`)
+          const donatorResponse = await fetch(`http://26.99.103.209:3456/pessoasFisicas/${jsonData.donatariofisicoId}`)
           const donatorData = await donatorResponse.json()
           setData((prevData: any) => ({ ...prevData, donator: donatorData }))
         } else if (jsonData.donatariojuridicoId) {
-          const donatorResponse = await fetch(`http://localhost:3456/pessoasJuridicas/${jsonData.donatariojuridicoId}`)
+          const donatorResponse = await fetch(`http://26.99.103.209:3456/pessoasJuridicas/${jsonData.donatariojuridicoId}`)
           const donatorData = await donatorResponse.json()
           setData((prevData: any) => ({ ...prevData, donator: donatorData }))
         }
@@ -131,12 +167,12 @@ export function DetailModal({ isOpen, onClose, itemId, itemType, electronicType 
       // Fetch additional data for requests
       if (itemType === "request") {
         if (jsonData.solicitacaofisicoId) {
-          const requesterResponse = await fetch(`http://localhost:3456/pessoasFisicas/${jsonData.solicitacaofisicoId}`)
+          const requesterResponse = await fetch(`http://26.99.103.209:3456/pessoasFisicas/${jsonData.solicitacaofisicoId}`)
           const requesterData = await requesterResponse.json()
           setData((prevData: any) => ({ ...prevData, requester: requesterData }))
         } else if (jsonData.solicitacaojuridicoId) {
           const requesterResponse = await fetch(
-            `http://localhost:3456/pessoasJuridicas/${jsonData.solicitacaojuridicoId}`,
+            `http://26.99.103.209:3456/pessoasJuridicas/${jsonData.solicitacaojuridicoId}`,
           )
           const requesterData = await requesterResponse.json()
           setData((prevData: any) => ({ ...prevData, requester: requesterData }))
@@ -199,10 +235,16 @@ export function DetailModal({ isOpen, onClose, itemId, itemType, electronicType 
 
   const formatDate = (dateString: string) => {
     if (!dateString) return "N/A"
-
     try {
-      // Handle different date formats
       const date = new Date(dateString)
+      // Se for meia-noite, mostra só a data
+      if (date.getHours() === 0 && date.getMinutes() === 0) {
+        return date.toLocaleDateString("pt-BR", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+        })
+      }
       return date.toLocaleDateString("pt-BR", {
         day: "2-digit",
         month: "2-digit",
@@ -212,6 +254,45 @@ export function DetailModal({ isOpen, onClose, itemId, itemType, electronicType 
       })
     } catch (e) {
       return dateString
+    }
+  }
+
+  // Função para atualizar status ou situação
+  const handleSave = async () => {
+    if (!data || !itemType || itemType !== "electronic" || !electronicType) return
+    let endpoint = ""
+    switch (electronicType.toLowerCase()) {
+      case "estabilizador": endpoint = `estabilizadores/${itemId}`; break
+      case "fonte": case "fonte de alimentação": endpoint = `fontesDeAlimentacao/${itemId}`; break
+      case "gabinete": endpoint = `gabinetes/${itemId}`; break
+      case "hd": endpoint = `hds/${itemId}`; break
+      case "impressora": endpoint = `impressoras/${itemId}`; break
+      case "monitor": endpoint = `monitores/${itemId}`; break
+      case "notebook": endpoint = `notebooks/${itemId}`; break
+      case "placa mãe": case "placa mae": endpoint = `placasMae/${itemId}`; break
+      case "processador": endpoint = `processadores/${itemId}`; break
+      case "teclado": endpoint = `teclados/${itemId}`; break
+      default: return
+    }
+    setIsSaving(true)
+    try {
+      const body: Record<string, string> = {}
+      if (pendingStatus !== null && pendingStatus !== data.status) body.status = pendingStatus
+      if (pendingSituacao !== null && pendingSituacao !== data.situacao) body.situacao = pendingSituacao
+      const res = await fetch(`http://localhost:3456/${endpoint}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      })
+      if (!res.ok) throw new Error("Erro ao atualizar")
+      setData((prev: any) => ({ ...prev, ...body }))
+      setPendingStatus(null)
+      setPendingSituacao(null)
+      toast({ title: "Sucesso", description: `Alterações salvas!` })
+    } catch (e) {
+      toast({ title: "Erro", description: `Não foi possível salvar as alterações.` })
+    } finally {
+      setIsSaving(false)
     }
   }
 
@@ -249,6 +330,55 @@ export function DetailModal({ isOpen, onClose, itemId, itemType, electronicType 
             {data.status && getStatusBadge(data.status)}
             {data.situacao && getStatusBadge(data.situacao)}
           </div>
+          <div className="flex flex-col md:flex-row items-center justify-center gap-4 mt-4">
+            <div className="min-w-[180px]">
+              <Label className="mb-1 block">Status</Label>
+              <Select value={pendingStatus !== null ? pendingStatus : (data.status || "")} onValueChange={v => setPendingStatus(v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Novo">Novo</SelectItem>
+                  <SelectItem value="Usado">Usado</SelectItem>
+                  <SelectItem value="Defeituoso">Defeituoso</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="min-w-[180px]">
+              <Label className="mb-1 block">Situação</Label>
+              <Select value={pendingSituacao !== null ? pendingSituacao : (data.situacao || "")} onValueChange={v => setPendingSituacao(v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione a situação" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Em estoque">Em estoque</SelectItem>
+                  <SelectItem value="Em uso">Em uso</SelectItem>
+                  <SelectItem value="Em manutenção">Em manutenção</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          {((pendingStatus !== null && pendingStatus !== data.status) || (pendingSituacao !== null && pendingSituacao !== data.situacao)) && (
+            <div className="flex justify-center mt-6">
+              <Button
+                onClick={handleSave}
+                disabled={isSaving}
+                className={
+                  isSaving
+                    ? "bg-gray-200 text-gray-500 border border-gray-300 font-semibold rounded-full px-8 py-3 shadow flex items-center gap-2 cursor-not-allowed"
+                    : "border border-green-600 text-green-700 bg-white hover:bg-green-50 font-semibold rounded-full px-8 py-3 shadow flex items-center gap-2 transition-all"
+                }
+                style={{ minWidth: 160 }}
+              >
+                {isSaving ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <Check className="w-5 h-5" />
+                )}
+                {isSaving ? "Salvando..." : "Salvar"}
+              </Button>
+            </div>
+          )}
         </div>
 
         <Separator />

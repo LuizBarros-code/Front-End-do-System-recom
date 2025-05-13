@@ -67,12 +67,42 @@ function isValidPassword(password: string) {
   return password.length >= 8 && /^[A-Z]/.test(password)
 }
 
+// Funções de máscara
+function maskCPF(value: string) {
+  return value
+    .replace(/\D/g, "")
+    .replace(/(\d{3})(\d)/, "$1.$2")
+    .replace(/(\d{3})(\d)/, "$1.$2")
+    .replace(/(\d{3})(\d{1,2})$/, "$1-$2")
+    .slice(0, 14)
+}
+function maskCNPJ(value: string) {
+  return value
+    .replace(/\D/g, "")
+    .replace(/(\d{2})(\d)/, "$1.$2")
+    .replace(/(\d{3})(\d)/, "$1.$2")
+    .replace(/(\d{3})(\d)/, "$1/$2")
+    .replace(/(\d{4})(\d{1,2})$/, "$1-$2")
+    .slice(0, 18)
+}
+function maskPhone(value: string) {
+  return value
+    .replace(/\D/g, "")
+    .replace(/(\d{2})(\d)/, "($1) $2")
+    .replace(/(\d{5})(\d)/, "$1-$2")
+    .slice(0, 15)
+}
+
 export default function RegisterPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showSuccess, setShowSuccess] = useState(false)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const router = useRouter()
+  const [cpf, setCpf] = useState("")
+  const [cnpj, setCnpj] = useState("")
+  const [telefone, setTelefone] = useState("")
+  const [telefoneEmpresa, setTelefoneEmpresa] = useState("")
 
   const uploadToGoogleDrive = async (file: File) => {
     const formData = new FormData()
@@ -140,21 +170,21 @@ export default function RegisterPage() {
         endpoint = `${API_BASE_URL}/pessoasFisicas`
         payload = {
           name: formData.get("name"),
-          cpf: formData.get("cpf"),
+          cpf: cpf.replace(/\D/g, ""),
           email: formData.get("email"),
           password: formData.get("password"),
-          telefone: formData.get("telefone") || "",
+          telefone: telefone.replace(/\D/g, "") || "",
           comprovanteDeBaixaRenda: fileUrl,
         }
       } else if (userType === "company") {
         endpoint = `${API_BASE_URL}/pessoasJuridicas`
         payload = {
           name: formData.get("name"),
-          cnpj: formData.get("cnpj"),
+          cnpj: cnpj.replace(/\D/g, ""),
           email: formData.get("email"),
           password: formData.get("password"),
           comprovanteDeProjeto: formData.get("comprovanteDeProjeto") || "",
-          telefone: formData.get("telefone") || "",
+          telefone: telefoneEmpresa.replace(/\D/g, "") || "",
           endereco: formData.get("endereco") || "",
         }
       } else {
@@ -279,6 +309,9 @@ export default function RegisterPage() {
                           name="cpf"
                           placeholder="000.000.000-00"
                           required
+                          value={cpf}
+                          onChange={e => setCpf(maskCPF(e.target.value))}
+                          maxLength={14}
                           className="bg-[#141922]/80 border-gray-700 text-white placeholder:text-gray-500 focus:border-[#84e100] focus:ring-[#84e100]/20"
                         />
                       </div>
@@ -303,46 +336,11 @@ export default function RegisterPage() {
                           id="telefone"
                           name="telefone"
                           placeholder="(00) 00000-0000"
+                          value={telefone}
+                          onChange={e => setTelefone(maskPhone(e.target.value))}
+                          maxLength={15}
                           className="bg-[#141922]/80 border-gray-700 text-white placeholder:text-gray-500 focus:border-[#84e100] focus:ring-[#84e100]/20"
                         />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="comprovanteDeBaixaRenda" className="text-white">
-                          Comprovante de Baixa Renda
-                        </Label>
-                        <div className="flex items-center gap-2">
-                          <Input
-                            id="comprovanteDeBaixaRenda"
-                            type="file"
-                            accept=".pdf,.jpg,.jpeg,.png"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0]
-                              if (file) {
-                                if (file.size > 5 * 1024 * 1024) {
-                                  // 5MB limit
-                                  setError("O arquivo deve ter no máximo 5MB")
-                                  e.target.value = ""
-                                  return
-                                }
-                                setSelectedFile(file)
-                                setError(null)
-                              }
-                            }}
-                            required
-                            disabled={isLoading}
-                            className="bg-[#141922]/80 border-gray-700 text-white file:text-white file:bg-[#2a3a1c] file:border-0 file:mr-4 file:px-4 file:py-2 hover:file:bg-[#84e100] hover:file:text-[#141922] disabled:opacity-50"
-                          />
-                          {isLoading && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
-                          {selectedFile && !isLoading && (
-                            <div className="flex items-center gap-2 text-sm text-gray-400">
-                              <Upload className="h-4 w-4" />
-                              {selectedFile.name}
-                            </div>
-                          )}
-                        </div>
-                        <p className="text-sm text-gray-400">
-                          Anexe um documento que comprove sua baixa renda (máximo 5MB)
-                        </p>
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="password" className="text-white">
@@ -402,7 +400,7 @@ export default function RegisterPage() {
                       {isLoading ? (
                         <>
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          {selectedFile ? "Enviando arquivo..." : "Criando conta..."}
+                          Criando conta...
                         </>
                       ) : (
                         "Criar Conta"
@@ -416,8 +414,8 @@ export default function RegisterPage() {
                     onSubmit={(e) => {
                       e.preventDefault()
                       const formData = new FormData(e.currentTarget as HTMLFormElement)
-                      const cnpj = formData.get("cnpj") as string
-                      if (!isValidCNPJ(cnpj)) {
+                      const cnpjValue = formData.get("cnpj") as string
+                      if (!isValidCNPJ(cnpjValue)) {
                         setError("CNPJ inválido. Por favor, verifique e tente novamente.")
                         return
                       }
@@ -448,6 +446,9 @@ export default function RegisterPage() {
                           name="cnpj"
                           placeholder="00.000.000/0000-00"
                           required
+                          value={cnpj}
+                          onChange={e => setCnpj(maskCNPJ(e.target.value))}
+                          maxLength={18}
                           className="bg-[#141922]/80 border-gray-700 text-white placeholder:text-gray-500 focus:border-[#84e100] focus:ring-[#84e100]/20"
                         />
                       </div>
@@ -472,6 +473,9 @@ export default function RegisterPage() {
                           id="telefone"
                           name="telefone"
                           placeholder="(00) 0000-0000"
+                          value={telefoneEmpresa}
+                          onChange={e => setTelefoneEmpresa(maskPhone(e.target.value))}
+                          maxLength={15}
                           className="bg-[#141922]/80 border-gray-700 text-white placeholder:text-gray-500 focus:border-[#84e100] focus:ring-[#84e100]/20"
                         />
                       </div>
@@ -530,29 +534,6 @@ export default function RegisterPage() {
                           }}
                         />
                       </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="comprovanteDeProjeto" className="text-white">
-                        Descrição do Projeto
-                      </Label>
-                      <Textarea
-                        id="comprovanteDeProjeto"
-                        name="comprovanteDeProjeto"
-                        placeholder="Descreva seu projeto e seus objetivos..."
-                        className="bg-[#141922]/80 border-gray-700 text-white placeholder:text-gray-500 focus:border-[#84e100] focus:ring-[#84e100]/20 min-h-[100px]"
-                        required
-                        minLength={100}
-                        onChange={(e) => {
-                          if (e.target.value.length < 100) {
-                            setError("A descrição do projeto deve conter no mínimo 100 caracteres.")
-                          } else {
-                            setError(null)
-                          }
-                        }}
-                      />
-                      <p className="text-sm text-gray-400">
-                        Forneça uma descrição detalhada do seu projeto e seus objetivos (mínimo de 100 caracteres)
-                      </p>
                     </div>
                     {error && (
                       <div className="p-3 text-sm bg-red-500/10 border border-red-500/20 rounded text-red-400">
