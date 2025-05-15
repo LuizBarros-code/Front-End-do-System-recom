@@ -31,6 +31,7 @@ import { WeeklyReportModal } from "@/components/ui/weekly-report-modal"
 import { MissionFormModal } from "@/components/ui/mission-form-modal"
 // Adicione o import do novo componente no topo do arquivo
 import { ScheduleFormModal } from "@/components/ui/schedule-form-modal"
+import { useToast } from "@/components/ui/use-toast"
 
 interface CoordinatorData {
   id: number
@@ -50,6 +51,10 @@ interface StudentData {
   periodo: string
   bolsistaTipo?: string
   status: string
+  cargo?: string
+  horarioInicio?: string
+  horarioFim?: string
+  horario?: string
 }
 
 interface ProjectDonation {
@@ -96,6 +101,7 @@ interface StudentRequest {
   usuariosolicitacaofisico: number
   usuariosolicitacaojuridico: number
   usuario: number
+  createdAt?: string
 }
 
 interface Electronic {
@@ -105,6 +111,8 @@ interface Electronic {
   modelo?: string
   estado?: string
   imagem?: string
+  situacao?: string
+  status?: string
 }
 
 interface WeeklyReport {
@@ -176,6 +184,7 @@ interface DisposalData {
   data: string
   status: string
   alunoId?: number
+  usuarioId?: number // Adicionado para refletir o backend
   createdAt: string
   deleted: boolean
   deletedAt?: string
@@ -691,30 +700,34 @@ export default function CoordinatorAdminPage() {
   // Adicione estes novos estados dentro da função CoordinatorAdminPage, logo após os estados existentes:
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth())
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear())
-  const [closedDates, setClosedDates] = useState<Set<string>>(
-    new Set([
-      // Exemplo de alguns feriados em 2023
-      "2023-01-01", // Ano Novo
-      "2023-04-21", // Tiradentes
-      "2023-05-01", // Dia do Trabalho
-      "2023-09-07", // Independência
-      "2023-10-12", // Nossa Senhora Aparecida
-      "2023-11-02", // Finados
-      "2023-11-15", // Proclamação da República
-      "2023-12-25", // Natal
-    ]),
-  )
+  const [closedDates, setClosedDates] = useState<Set<string>>(new Set())
+  const [electronicImages, setElectronicImages] = useState<{ [key: string]: string }>({})
+  const { toast } = useToast()
+  const [datesToDelete, setDatesToDelete] = useState<Set<string>>(new Set());
+  // Adicione o estado para datas a criar
+  const [datesToCreate, setDatesToCreate] = useState<Set<string>>(new Set());
+  // Adicione um estado para armazenar as datas do backend
+  const [backendDates, setBackendDates] = useState<any[]>([]);
+  // Adicione um novo estado para inscritos
+  const [studentsInscritos, setStudentsInscritos] = useState<StudentData[]>([]);
+  // 1. Adicione um estado para mapear id do aluno para nome
+  const [missionStudentNames, setMissionStudentNames] = useState<{ [id: number]: string }>({});
 
   const API_URL = "http://26.99.103.209:3456"
 
+  // Definir variáveis globais para o calendário
+  const today = new Date();
+  const currentMonth = today.getMonth();
+  const currentYear = today.getFullYear();
+
   useEffect(() => {
-    // Check if user is logged in as coordinator
-    const coordinatorId = localStorage.getItem("coordinatorId")
+    // Check if user is logged in as admin
+    const userId = localStorage.getItem("userId")
     const userType = localStorage.getItem("userType")
 
-    if (!coordinatorId || userType !== "coordinator") {
-      // Redirect to login if not logged in as coordinator
-      console.log("No coordinator ID found or wrong user type. Redirecting to login...")
+    if (!userId || userType !== "ADMIN") {
+      // Redirect to login if not logged in as admin
+      console.log("No user ID found or wrong user type. Redirecting to login...")
       router.push("/login")
       return
     }
@@ -722,8 +735,8 @@ export default function CoordinatorAdminPage() {
     // Fetch coordinator data using the ID
     const fetchCoordinatorData = async () => {
       try {
-        console.log("Fetching coordinator data for ID:", coordinatorId)
-        const response = await fetch(`${API_URL}/coordenadores/${coordinatorId}`)
+        console.log("Fetching coordinator data for ID:", userId)
+        const response = await fetch(`${API_URL}/coordenadores/${userId}`)
 
         if (response.ok) {
           const data = await response.json()
@@ -732,7 +745,7 @@ export default function CoordinatorAdminPage() {
         } else {
           console.error("Failed to fetch coordinator data. Status:", response.status)
           // If coordinator data can't be fetched, redirect to login
-          localStorage.removeItem("coordinatorId")
+          localStorage.removeItem("userId")
           localStorage.removeItem("userType")
           router.push("/login")
         }
@@ -741,7 +754,7 @@ export default function CoordinatorAdminPage() {
         console.error("Error fetching coordinator data:", error)
         setIsLoading(false)
         // On error, also redirect to login
-        localStorage.removeItem("coordinatorId")
+        localStorage.removeItem("userId")
         localStorage.removeItem("userType")
         router.push("/login")
       }
@@ -753,140 +766,27 @@ export default function CoordinatorAdminPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [projectDonationsRes, userDonationsRes, studentRequestsRes, studentsRes] = await Promise.all([
+        const [projectDonationsRes, userDonationsRes, studentRequestsRes, inscritosRes] = await Promise.all([
           fetch(`${API_URL}/doacoes`),
           fetch(`${API_URL}/doacoesUsuarios`),
           fetch(`${API_URL}/solicitacoes`),
-          fetch(`http://localhost:3456/inscritos`),
+          fetch('http://localhost:3456/inscritos'),
         ])
 
-        if (projectDonationsRes.ok && userDonationsRes.ok && studentRequestsRes.ok && studentsRes.ok) {
+        if (projectDonationsRes.ok && userDonationsRes.ok && studentRequestsRes.ok && inscritosRes.ok) {
           const projectDonationsData: ProjectDonation[] = await projectDonationsRes.json()
           const userDonationsData: UserDonation[] = await userDonationsRes.json()
           const studentRequestsData: StudentRequest[] = await studentRequestsRes.json()
-          const studentsData = await studentsRes.json()
+          // const inscritosDataRaw = await inscritosRes.json()
+          // const inscritosData: StudentData[] = inscritosDataRaw.map((item: any) => ({ ... }));
+          // setStudents(inscritosData) // REMOVIDO: students deve ser alimentado só pelo fetch de /alunos
 
           setProjectDonations(projectDonationsData)
           setUserDonations(userDonationsData)
           setStudentRequests(studentRequestsData)
-          setStudents(studentsData)
         } else {
           throw new Error("Failed to fetch data")
         }
-
-        // Mock data for students
-        // const mockStudents: StudentData[] = [
-        //   {
-        //     id: 1,
-        //     name: "João Silva",
-        //     email: "joao.silva@email.com",
-        //     matricula: "2021001",
-        //     curso: "Engenharia da Computação",
-        //     status: "APPROVED",
-        //   },
-        //   {
-        //     id: 2,
-        //     name: "Maria Santos",
-        //     email: "maria.santos@email.com",
-        //     matricula: "2021002",
-        //     curso: "Ciência da Computação",
-        //     status: "APPROVED",
-        //   },
-        //   {
-        //     id: 3,
-        //     name: "Pedro Oliveira",
-        //     email: "pedro.oliveira@email.com",
-        //     matricula: "2021003",
-        //     curso: "Sistemas de Informação",
-        //     status: "PENDING",
-        //   },
-        //   {
-        //     id: 4,
-        //     name: "Ana Costa",
-        //     email: "ana.costa@email.com",
-        //     matricula: "2021004",
-        //     curso: "Engenharia Elétrica",
-        //     status: "REJECTED",
-        //   },
-        //   {
-        //     id: 5,
-        //     name: "Carlos Souza",
-        //     email: "carlos.souza@email.com",
-        //     matricula: "2021005",
-        //     curso: "Engenharia da Computação",
-        //     status: "PENDING",
-        //   },
-        // ]
-        // setStudents(mockStudents)
-
-        // Mock data for weekly reports and assigned missions
-        const mockWeeklyReports: WeeklyReport[] = [
-          {
-            id: 1,
-            title: "Progresso Semanal - Semana 1",
-            week: "01/03/2023 - 07/03/2023",
-            content: "Realizei a triagem de 10 equipamentos e participei do workshop de reparo de monitores.",
-            status: "APPROVED",
-            submissionDate: "2023-03-07T10:30:00",
-            feedback: "Excelente trabalho! Continue assim.",
-            studentName: "João Silva",
-          },
-          {
-            id: 2,
-            title: "Progresso Semanal - Semana 2",
-            week: "08/03/2023 - 14/03/2023",
-            content: "Consertei 5 notebooks e cataloguei 15 novos itens recebidos por doação.",
-            status: "PENDING",
-            submissionDate: "2023-03-14T09:45:00",
-            studentName: "Maria Santos",
-          },
-          {
-            id: 3,
-            title: "Progresso Semanal - Semana 1",
-            week: "01/03/2023 - 07/03/2023",
-            content: "Participei da organização do estoque e catalogação de novos equipamentos.",
-            status: "REJECTED",
-            submissionDate: "2023-03-07T14:20:00",
-            feedback: "Relatório incompleto. Por favor, adicione mais detalhes sobre as atividades realizadas.",
-            studentName: "Pedro Oliveira",
-          },
-        ]
-
-        const mockAssignedMissions: AssignedMission[] = [
-          {
-            id: 1,
-            title: "Reparo de Monitores",
-            description: "Realizar diagnóstico e reparo em 5 monitores LCD com problemas de imagem.",
-            deadline: "2023-03-20T18:00:00",
-            priority: "high",
-            status: "IN_PROGRESS",
-            assignedDate: "2023-03-10T09:00:00",
-            assignedTo: "João Silva",
-          },
-          {
-            id: 2,
-            title: "Catalogação de Doações",
-            description: "Catalogar e registrar no sistema 20 novos itens recebidos na última campanha de doação.",
-            deadline: "2023-03-25T18:00:00",
-            priority: "medium",
-            status: "PENDING",
-            assignedDate: "2023-03-12T14:30:00",
-            assignedTo: "Maria Santos",
-          },
-          {
-            id: 3,
-            title: "Manutenção de Notebooks",
-            description: "Realizar limpeza e manutenção preventiva em 10 notebooks do laboratório.",
-            deadline: "2023-03-22T18:00:00",
-            priority: "low",
-            status: "APPROVED",
-            assignedDate: "2023-03-15T10:00:00",
-            assignedTo: "Pedro Oliveira",
-          },
-        ]
-
-        setWeeklyReports(mockWeeklyReports)
-        setAssignedMissions(mockAssignedMissions)
       } catch (error) {
         console.error("Error fetching data:", error)
       }
@@ -915,6 +815,7 @@ export default function CoordinatorAdminPage() {
             total: totalDonations,
             pessoaFisica: pessoaFisicaDonations,
             pessoaJuridica: pessoaJuridicaDonations,
+            approvalRate: 0,
           })
 
           // Fetch donor information for each donation
@@ -976,76 +877,54 @@ export default function CoordinatorAdminPage() {
     fetchDonationsData()
   }, [])
 
-  // Add this useEffect to fetch disposals data
+  // Refatore o carregamento dos responsáveis dos descartes
   useEffect(() => {
     const fetchDisposalsData = async () => {
       try {
         setDisposalsLoading(true)
         const response = await fetch(`http://localhost:3456/descartes`)
-
         if (response.ok) {
           const disposalsData: DisposalData[] = await response.json()
           setDisposals(disposalsData)
 
-          // Calculate statistics
-          const totalDisposals = disposalsData.length
-          // Mês e ano selecionados
-          const selectedMonthNumber = selectedMonth;
-          const selectedYearNumber = selectedYear;
+          // Calcule o total de descartes corretamente
+          const totalDisposals = disposalsData.length;
 
-          // Descartes do mês/ano selecionados
-          const thisMonthDisposals = disposalsData.filter((d) => {
-            const date = new Date(d.data);
-            return date.getMonth() === selectedMonthNumber && date.getFullYear() === selectedYearNumber;
-          }).length;
-
-          // Calcular descartes por mês/ano
-          const monthlyData: Record<string, number> = {};
+          // Calcule os descartes por mês usando createdAt
+          const disposalsByMonth: Record<string, number> = {};
           disposalsData.forEach((disposal) => {
-            const date = new Date(disposal.data);
-            const monthYear = `${date.getMonth()}-${date.getFullYear()}`;
-            if (!monthlyData[monthYear]) {
-              monthlyData[monthYear] = 0;
-            }
-            monthlyData[monthYear]++;
+            const date = new Date(disposal.createdAt);
+            const month = date.getMonth(); // 0-11
+            const year = date.getFullYear();
+            const key = `${month}-${year}`;
+            disposalsByMonth[key] = (disposalsByMonth[key] || 0) + 1;
           });
 
-          setDisposalStats({
-            total: totalDisposals,
-            thisMonth: thisMonthDisposals,
-            monthlyData,
-          });
-
-          // Fetch student information for each disposal
+          // Buscar informações dos responsáveis (alunos) de forma eficiente
+          const uniqueUserIds = Array.from(new Set(disposalsData.map(d => d.usuarioId).filter((id): id is number => typeof id === 'number')))
           const studentInfoMap = new Map<number, StudentInfo>()
-
           await Promise.all(
-            disposalsData
-              .filter((disposal) => disposal.alunoId)
-              .map(async (disposal) => {
-                if (disposal.alunoId && !studentInfoMap.has(disposal.alunoId)) {
-                  try {
-                    const studentResponse = await fetch(`${API_URL}/alunos/${disposal.alunoId}`)
-                    if (studentResponse.ok) {
-                      const studentData = await studentResponse.json()
-                      studentInfoMap.set(disposal.alunoId, {
-                        id: studentData.id,
-                        name: studentData.name,
-                        email: studentData.email,
-                        matricula: studentData.matricula,
-                        curso: studentData.curso,
-                        dias: studentData.dias,
-                        bolsistaTipo: studentData.bolsistaTipo,
-                        cargo: studentData.cargo,
-                      })
-                    }
-                  } catch (error) {
-                    console.error(`Error fetching student ${disposal.alunoId}:`, error)
-                  }
+            uniqueUserIds.map(async (usuarioId) => {
+              try {
+                const studentResponse = await fetch(`http://localhost:3456/alunos/${usuarioId}`)
+                if (studentResponse.ok) {
+                  const studentData = await studentResponse.json()
+                  studentInfoMap.set(usuarioId, {
+                    id: studentData.id,
+                    name: studentData.name,
+                    email: studentData.email,
+                    matricula: studentData.matricula,
+                    curso: studentData.curso,
+                    dias: studentData.dias,
+                    bolsistaTipo: studentData.bolsistaTipo,
+                    cargo: studentData.cargo,
+                  })
                 }
-              }),
+              } catch (error) {
+                console.error(`Error fetching student ${usuarioId}:`, error)
+              }
+            })
           )
-
           setStudentInfoMap(studentInfoMap)
         } else {
           console.error("Failed to fetch disposals data")
@@ -1056,7 +935,6 @@ export default function CoordinatorAdminPage() {
         setDisposalsLoading(false)
       }
     }
-
     fetchDisposalsData()
   }, [selectedMonth, selectedYear])
 
@@ -1075,6 +953,7 @@ export default function CoordinatorAdminPage() {
           { url: "placasMae", type: "Placa Mãe" },
           { url: "processadores", type: "Processador" },
           { url: "teclados", type: "Teclado" },
+          { url: "mouses", type: "Mouse" }, // <-- Adicionado para buscar mouses
         ];
 
         const responses = await Promise.all(
@@ -1099,6 +978,67 @@ export default function CoordinatorAdminPage() {
 
     fetchElectronics();
   }, []);
+
+  useEffect(() => {
+    const fetchImages = async () => {
+      const newImages: { [key: string]: string } = {};
+      await Promise.all(
+        electronics.map(async (electronic) => {
+          const tipoNormalizado = (electronic.tipo || "").toLowerCase().replace(/[-_ ]/g, "");
+          let endpoint = "";
+          switch (tipoNormalizado) {
+            case "estabilizador":
+              endpoint = `estabilizado/${electronic.id}`;
+              break;
+            case "fontedealimentacao":
+              endpoint = `fonteDeAlimentacao/${electronic.id}`;
+              break;
+            case "gabinete":
+              endpoint = `gabinete/${electronic.id}`;
+              break;
+            case "hd":
+              endpoint = `hd/${electronic.id}`;
+              break;
+            case "impressora":
+              endpoint = `impressora/${electronic.id}`;
+              break;
+            case "monitor":
+              endpoint = `monitor/${electronic.id}`;
+              break;
+            case "notebook":
+              endpoint = `notebook/${electronic.id}`;
+              break;
+            case "placamae":
+              endpoint = `placaMae/${electronic.id}`;
+              break;
+            case "processador":
+              endpoint = `processador/${electronic.id}`;
+              break;
+            case "teclado":
+              endpoint = `teclado/${electronic.id}`;
+              break;
+            default:
+              endpoint = "";
+          }
+          if (endpoint) {
+            try {
+              const res = await fetch(`http://localhost:3456/imagens/${endpoint}`);
+              if (res.ok) {
+                const data = await res.json();
+                if (data && data.imagem) {
+                  newImages[`${electronic.tipo}-${electronic.id}`] = `http://localhost:3456${data.imagem}`;
+                }
+              }
+            } catch (e) {
+              // erro ao buscar imagem, ignora
+            }
+          }
+        })
+      );
+      setElectronicImages(newImages);
+    };
+    if (electronics.length > 0) fetchImages();
+  }, [electronics]);
 
   // Resetar filtros quando mudar de tipo
   useEffect(() => {
@@ -1194,7 +1134,7 @@ export default function CoordinatorAdminPage() {
               <div className="relative">
                 <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Pesquisar..."
+                  placeholder={type === "electronics" ? "Pesquisar por nome..." : "Pesquisar..."}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-8"
@@ -1202,42 +1142,43 @@ export default function CoordinatorAdminPage() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label>Status</Label>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Filtrar por status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos os status</SelectItem>
-                  <SelectItem value="PENDING">Pendentes</SelectItem>
-                  <SelectItem value="APPROVED">Aprovados</SelectItem>
-                  <SelectItem value="REJECTED">Rejeitados</SelectItem>
-                  {type === "assigned-missions" && <SelectItem value="IN_PROGRESS">Em Andamento</SelectItem>}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {type === "requests" && (
-            <>
-              <Separator />
+            {/* Only show status/type filter if not assigned-missions or weekly-reports */}
+            {type !== "assigned-missions" && type !== "weekly-reports" && (
               <div className="space-y-2">
-                <Label>Urgência</Label>
-                <Select defaultValue="all">
+                <Label>{type === "electronics" ? "Tipo" : "Status"}</Label>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Filtrar por urgência" />
+                    <SelectValue placeholder={type === "electronics" ? "Filtrar por tipo" : "Filtrar por status"} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">Todas</SelectItem>
-                    <SelectItem value="high">Alta</SelectItem>
-                    <SelectItem value="medium">Média</SelectItem>
-                    <SelectItem value="low">Baixa</SelectItem>
+                    <SelectItem value="all">Todos</SelectItem>
+                    {type === "electronics" ? (
+                      <>
+                        <SelectItem value="teclado">Teclado</SelectItem>
+                        <SelectItem value="hd">HD</SelectItem>
+                        <SelectItem value="fonte">Fonte de Alimentação</SelectItem>
+                        <SelectItem value="gabinete">Gabinete</SelectItem>
+                        <SelectItem value="monitor">Monitor</SelectItem>
+                        <SelectItem value="mouse">Mouse</SelectItem>
+                        <SelectItem value="estabilizador">Estabilizador</SelectItem>
+                        <SelectItem value="impressora">Impressora</SelectItem>
+                        <SelectItem value="placamae">Placa Mãe</SelectItem>
+                        <SelectItem value="notebook">Notebook</SelectItem>
+                        <SelectItem value="processador">Processador</SelectItem>
+                      </>
+                    ) : (
+                      <>
+                        <SelectItem value="PENDING">Pendentes</SelectItem>
+                        <SelectItem value="APPROVED">Aprovados</SelectItem>
+                        <SelectItem value="REJECTED">Rejeitados</SelectItem>
+                        {type === "assigned-missions" && <SelectItem value="IN_PROGRESS">Em Andamento</SelectItem>}
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
-            </>
-          )}
+            )}
+          </div>
 
           {(type === "weekly-reports" || type === "assigned-missions") && (
             <>
@@ -1277,10 +1218,10 @@ export default function CoordinatorAdminPage() {
     return { name: donation.nomeOuEmpresa, tipo: "Desconhecido" }
   }
 
-  // Add this helper function to get student info
-  const getStudentInfo = (alunoId?: number) => {
-    if (!alunoId) return { name: "Não atribuído" }
-    return studentInfoMap.get(alunoId) || { name: "Desconhecido" }
+  // Atualize a função getStudentInfo para buscar pelo usuarioId
+  const getStudentInfo = (usuarioId?: number) => {
+    if (!usuarioId) return { name: "Não atribuído" }
+    return studentInfoMap.get(usuarioId) || { name: "Desconhecido" }
   }
 
   // Add this function to count equipment items
@@ -1348,8 +1289,8 @@ export default function CoordinatorAdminPage() {
   }
 
   // Função para filtrar os alunos com base no termo de pesquisa e status
-  const getFilteredStudents = () => {
-    return students.filter((student) => {
+  const getFilteredStudents = (list = students) => {
+    return list.filter((student) => {
       // Filtro de pesquisa (case-insensitive)
       const matchesSearch =
         searchTerm === "" ||
@@ -1432,9 +1373,9 @@ export default function CoordinatorAdminPage() {
       // Filtro de pesquisa
       const matchesSearch =
         searchTerm === "" ||
-        report.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        report.studentName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        report.content.toLowerCase().includes(searchTerm.toLowerCase())
+        (report.title?.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (report.studentName?.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (report.content?.toLowerCase().includes(searchTerm.toLowerCase()));
 
       // Filtro de status
       const matchesStatus = statusFilter === "all" || report.status === statusFilter
@@ -1444,66 +1385,57 @@ export default function CoordinatorAdminPage() {
     })
   }
 
-  // Função para filtrar missões atribuídas
+  // Função para filtrar missões atribuídas (ajustada para o novo contrato)
   const getFilteredAssignedMissions = () => {
-    return assignedMissions.filter((mission) => {
+    return assignedMissions.filter((mission: any) => {
       // Filtro de pesquisa
       const matchesSearch =
         searchTerm === "" ||
-        mission.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        mission.assignedTo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        mission.description.toLowerCase().includes(searchTerm.toLowerCase())
+        (mission.titulo && mission.titulo.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (mission.descricao && mission.descricao.toLowerCase().includes(searchTerm.toLowerCase()));
 
-      // Filtro de status
-      const matchesStatus = statusFilter === "all" || mission.status === statusFilter
-
-      // Retorna true se a missão corresponder a ambos os filtros
-      return matchesSearch && matchesStatus
-    })
-  }
+      // Remover filtro de status para missões atribuídas
+      return matchesSearch;
+    });
+  };
 
   // Add this function to filter disposals
   const getFilteredDisposals = () => {
     return disposals.filter((disposal) => {
       // Filter by search term
-      const studentInfo = getStudentInfo(disposal.alunoId)
+      const studentInfo = getStudentInfo(disposal.usuarioId)
       const searchLower = searchTerm.toLowerCase()
       const matchesSearch =
         searchTerm === "" ||
-        disposal.descricao.toLowerCase().includes(searchLower) ||
+        disposal.descricao?.toLowerCase().includes(searchLower) ||
         disposal.metodoDeDescarte?.toLowerCase().includes(searchLower) ||
-        studentInfo.name.toLowerCase().includes(searchLower)
+        studentInfo.name?.toLowerCase().includes(searchLower)
 
-      // Filter by status if needed
-      const matchesStatus =
-        statusFilter === "all" ||
-        disposal.status.toLowerCase() === statusFilter.toLowerCase() ||
-        (statusFilter === "concluido" && disposal.status === "COMPLETED") ||
-        (statusFilter === "agendado" && disposal.status === "SCHEDULED") ||
-        (statusFilter === "processamento" && disposal.status === "IN_PROGRESS")
-
+      // Remover filtro de status
       // Filter by month if activeMonth is set
       const disposalDate = new Date(disposal.data)
       const disposalMonth = disposalDate.toLocaleString("default", { month: "long" })
       const matchesMonth = !activeMonth || disposalMonth.toLowerCase() === activeMonth.toLowerCase()
 
-      return matchesSearch && matchesStatus && matchesMonth
+      return matchesSearch && matchesMonth
     })
   }
 
   // Função para filtrar eletrônicos
   const getFilteredElectronics = () => {
     return electronics.filter((electronic) => {
-      // Filtro de pesquisa
+      // Filtro de pesquisa por nome
       const matchesSearch =
         searchTerm === "" ||
-        electronic.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        electronic.tipo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (electronic.modelo && electronic.modelo.toLowerCase().includes(searchTerm.toLowerCase()))
+        (electronic.nome && electronic.nome.toLowerCase().includes(searchTerm.toLowerCase()));
 
-      // Não há filtro de status para eletrônicos, então retornamos apenas com base na pesquisa
-      return matchesSearch
-    })
+      // Filtro de tipo (case-insensitive, igual ao dropdown)
+      const matchesType =
+        statusFilter === "all" ||
+        (electronic.tipo && electronic.tipo.toLowerCase() === statusFilter.toLowerCase());
+
+      return matchesSearch && matchesType;
+    });
   }
 
   // Função para atualizar a lista de inscritos
@@ -1511,15 +1443,317 @@ export default function CoordinatorAdminPage() {
     try {
       const response = await fetch('http://localhost:3456/inscritos');
       if (response.ok) {
-        const data = await response.json();
-        setStudents(data);
+        const inscritosDataRaw = await response.json();
+        const inscritosData: StudentData[] = inscritosDataRaw.map((item: any) => ({
+          id: item.id,
+          name: item.name || '',
+          email: item.email || '',
+          dias: item.dias || '',
+          matricula: item.matricula || '',
+          curso: item.curso || item.course || '',
+          periodo: item.periodo || '',
+          bolsistaTipo: item.bolsistaTipo || '',
+          status: item.status || '',
+          cargo: item.cargo || '',
+          horarioInicio: item.horarioInicio || '',
+          horarioFim: item.horarioFim || '',
+          horario: item.horario || '',
+        }));
+        setStudentsInscritos(inscritosData);
       } else {
-        console.error('Erro ao atualizar lista de inscritos');
+        setStudentsInscritos([]);
       }
     } catch (error) {
-      console.error('Erro ao atualizar lista de inscritos:', error);
+      setStudentsInscritos([]);
     }
   };
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [projectDonationsRes, userDonationsRes, studentRequestsRes, inscritosRes] = await Promise.all([
+          fetch(`${API_URL}/doacoes`),
+          fetch(`${API_URL}/doacoesUsuarios`),
+          fetch(`${API_URL}/solicitacoes`),
+          fetch('http://localhost:3456/inscritos'),
+        ])
+
+        if (projectDonationsRes.ok && userDonationsRes.ok && studentRequestsRes.ok && inscritosRes.ok) {
+          const projectDonationsData: ProjectDonation[] = await projectDonationsRes.json()
+          const userDonationsData: UserDonation[] = await userDonationsRes.json()
+          const studentRequestsData: StudentRequest[] = await studentRequestsRes.json()
+          // const inscritosDataRaw = await inscritosRes.json()
+          // const inscritosData: StudentData[] = inscritosDataRaw.map((item: any) => ({ ... }));
+          // setStudents(inscritosData) // REMOVIDO: students deve ser alimentado só pelo fetch de /alunos
+
+          setProjectDonations(projectDonationsData)
+          setUserDonations(userDonationsData)
+          setStudentRequests(studentRequestsData)
+        } else {
+          throw new Error("Failed to fetch data")
+        }
+      } catch (error) {
+        console.error("Error fetching data:", error)
+      }
+    }
+
+    fetchData()
+  }, [])
+
+  useEffect(() => {
+    const fetchClosedDates = async () => {
+      try {
+        const res = await fetch('http://localhost:3456/datas');
+        const data = await res.json();
+        setBackendDates(data); // Salva as datas do backend
+        const closed: Set<string> = new Set(
+          data
+            .filter((d: any) => d.disponibilidade === false)
+            .map((d: any) => new Date(d.data).toISOString().split('T')[0])
+        );
+        setClosedDates(closed);
+      } catch (e) { /* erro silencioso */ }
+    };
+    fetchClosedDates();
+  }, [selectedMonth, selectedYear]);
+
+  const handleDayClick = (date: Date, isClosed: boolean, isWeekend: boolean) => {
+    if (isWeekend) return;
+    const dateString = date.toISOString().split('T')[0];
+
+    if (!isClosed) {
+      setDatesToCreate(prev => {
+        const newSet = new Set(prev);
+        if (newSet.has(dateString)) {
+          newSet.delete(dateString);
+        } else {
+          newSet.add(dateString);
+        }
+        console.log('Selecionados para criar:', Array.from(newSet));
+        return newSet;
+      });
+    }
+  };
+
+  const handleDeleteMark = (dateString: string) => {
+    setDatesToDelete(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(dateString)) {
+        newSet.delete(dateString);
+      } else {
+        newSet.add(dateString);
+      }
+      return newSet;
+    });
+  };
+
+  const handleSaveChanges = async () => {
+    try {
+      // Buscar todas as datas fechadas para obter os IDs
+      const res = await fetch('http://localhost:3456/datas');
+      const data = await res.json();
+
+      // 1. Criar datas marcadas para criação
+      for (const dateString of datesToCreate) {
+        // Só cria se não existir já fechada
+        if (!closedDates.has(dateString)) {
+          // Ajuste para UTC-3 (Brasília): envia 03:00 UTC, que é meia-noite local
+          const [year, month, day] = dateString.split('-');
+          const date = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), 3, 0, 0));
+          await fetch('http://localhost:3456/datas', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ data: date.toISOString(), disponibilidade: false }),
+          });
+        }
+      }
+
+      // 2. Deletar datas marcadas para deleção
+      for (const dateString of datesToDelete) {
+        // Só deleta se estiver fechada
+        if (closedDates.has(dateString)) {
+          const dateToDelete = data.find((d: any) => {
+            const backendDate = new Date(d.data);
+            return backendDate.toISOString().split('T')[0] === dateString;
+          });
+          if (dateToDelete) {
+            await fetch(`http://localhost:3456/datas/${dateToDelete.id}`, {
+              method: 'DELETE',
+            });
+          }
+        }
+      }
+
+      // Limpar os sets
+      setDatesToCreate(new Set());
+      setDatesToDelete(new Set());
+
+      // Atualizar a lista de datas fechadas
+      const updatedRes = await fetch('http://localhost:3456/datas');
+      const updatedData = await updatedRes.json();
+      const closed: Set<string> = new Set(
+        updatedData
+          .filter((d: any) => d.disponibilidade === false)
+          .map((d: any) => new Date(d.data).toISOString().split('T')[0])
+      );
+      setClosedDates(closed);
+
+      toast({
+        title: "Alterações salvas",
+        description: "As datas foram atualizadas com sucesso.",
+      });
+    } catch (error) {
+      console.error('Erro ao salvar alterações:', error);
+      toast({
+        variant: "destructive",
+        title: "Erro ao salvar",
+        description: "Ocorreu um erro ao salvar as alterações. Tente novamente.",
+      });
+    }
+  };
+
+  // Antes do useEffect de relatórios semanais:
+  const fetchWeeklyReports = async () => {
+    try {
+      const response = await fetch('http://localhost:3456/relatorios');
+      if (response.ok) {
+        const reports = await response.json();
+        // Buscar nomes dos alunos em paralelo
+        const uniqueUserIds = [...new Set(reports.map((r: any) => r.usuarioId).filter((id: number) => !!id))];
+        const userIdToName: Record<number, string> = {};
+        await Promise.all(
+          uniqueUserIds.map(async (id) => {
+            try {
+              const res = await fetch(`http://localhost:3456/alunos/${id}`);
+              if (res.ok) {
+                const aluno = await res.json();
+                userIdToName[id] = aluno.name;
+              } else {
+                userIdToName[id] = 'Desconhecido';
+              }
+            } catch {
+              userIdToName[id] = 'Desconhecido';
+            }
+          })
+        );
+        // Montar os dados para a tabela
+        const formatted = reports.map((r: any) => ({
+          id: r.id,
+          studentName: userIdToName[r.usuarioId] || 'Desconhecido',
+          title: r.name,
+          week: r.periodo,
+          submissionDate: r.createdAt,
+          status: r.aprovado ? 'APPROVED' : 'PENDING',
+          feedback: r.feedback,
+          content: r.resumo,
+        }));
+        setWeeklyReports(formatted);
+      } else {
+        setWeeklyReports([]);
+      }
+    } catch (error) {
+      setWeeklyReports([]);
+    }
+  };
+
+  useEffect(() => {
+    fetchWeeklyReports();
+  }, []);
+
+  // 1. Extraia a função fetchMissions para fora do useEffect para poder reutilizá-la
+  const fetchMissions = async () => {
+    try {
+      const response = await fetch('http://localhost:3456/missoes');
+      if (response.ok) {
+        const missions = await response.json();
+        setAssignedMissions(missions);
+        // Buscar nomes dos alunos designados
+        const uniqueStudentIds = [...new Set(missions.map((m: any) => Number(m.usuarioId)).filter((id: number) => !!id))] as number[];
+        const namesMap: { [id: number]: string } = {};
+        await Promise.all(
+          uniqueStudentIds.map((id) => {
+            return (async () => {
+              try {
+                const res = await fetch(`http://localhost:3456/alunos/${id}`);
+                if (res.ok) {
+                  const aluno = await res.json();
+                  namesMap[id] = aluno.name;
+                } else {
+                  namesMap[id] = 'Desconhecido';
+                }
+              } catch {
+                namesMap[id] = 'Desconhecido';
+              }
+            })();
+          })
+        );
+        setMissionStudentNames(namesMap);
+      } else {
+        setAssignedMissions([]);
+        setMissionStudentNames({});
+      }
+    } catch (error) {
+      setAssignedMissions([]);
+      setMissionStudentNames({});
+    }
+  };
+
+  // 2. No useEffect, apenas chame fetchMissions
+  useEffect(() => {
+    fetchMissions();
+  }, []);
+
+  // Carregue os alunos apenas para a aba de Horários dos Alunos
+  useEffect(() => {
+    const fetchAlunos = async () => {
+      try {
+        const response = await fetch('http://localhost:3456/alunos');
+        if (response.ok) {
+          const alunosData = await response.json();
+          setStudents(alunosData);
+        } else {
+          setStudents([]);
+        }
+      } catch (error) {
+        setStudents([]);
+      }
+    };
+    fetchAlunos();
+  }, []);
+
+  // Atualize também o botão de atualizar da aba de horários:
+  const handleRefreshAlunos = async () => {
+    try {
+      const response = await fetch('http://localhost:3456/alunos');
+      if (response.ok) {
+        const alunosData = await response.json();
+        setStudents(alunosData);
+      } else {
+        setStudents([]);
+      }
+    } catch (error) {
+      setStudents([]);
+    }
+  };
+
+  // Antes do useEffect de solicitações:
+  const fetchStudentRequests = async () => {
+    try {
+      const response = await fetch(`${API_URL}/solicitacoes`);
+      if (response.ok) {
+        const studentRequestsData: StudentRequest[] = await response.json();
+        setStudentRequests(studentRequestsData);
+      } else {
+        setStudentRequests([]);
+      }
+    } catch (error) {
+      setStudentRequests([]);
+    }
+  };
+
+  useEffect(() => {
+    fetchStudentRequests();
+  }, []);
 
   if (isLoading) {
     return <div>Carregando...</div>
@@ -1562,7 +1796,6 @@ export default function CoordinatorAdminPage() {
           <TabsTrigger value="inscritos">Inscritos</TabsTrigger>
           <TabsTrigger value="relatorio">Relatório</TabsTrigger>
           <TabsTrigger value="horarios">Horários</TabsTrigger>
-          <TabsTrigger value="project-donations">Doação Projeto</TabsTrigger>
           <TabsTrigger value="requests">Solicitações</TabsTrigger>
           <TabsTrigger value="weekly-reports">Relatórios Semanais</TabsTrigger>
           <TabsTrigger value="assigned-missions">Missões</TabsTrigger>
@@ -1577,7 +1810,7 @@ export default function CoordinatorAdminPage() {
                   <CardTitle>Doações para Projetos</CardTitle>
                   <CardDescription>Gerencie as doações para projetos.</CardDescription>
                 </div>
-                <Button>Aprovar Selecionados</Button>
+                {/* Removido o botão Aprovar Selecionados */}
               </CardHeader>
               <CardContent>
                 {getFilteredProjectDonations().length > 0 ? (
@@ -1612,9 +1845,7 @@ export default function CoordinatorAdminPage() {
                           </TableCell>
                           <TableCell>{getStatusBadgePT(donation.status)}</TableCell>
                           <TableCell>
-                            <Button size="sm" variant="outline" onClick={() => handleOpenModal(donation.id, "project")}>
-                              Ver Detalhes
-                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => handleOpenModal(donation.id, "project")}>Ver Detalhes</Button>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -1635,8 +1866,13 @@ export default function CoordinatorAdminPage() {
             {renderFilterPanel("requests")}
             <Card>
               <CardHeader>
-                <CardTitle>Solicitações</CardTitle>
-                <CardDescription>Gerencie as solicitações feitas por pessoas físicas ou jurídicas.</CardDescription>
+                <div className="flex flex-row items-center justify-between w-full">
+                  <div>
+                    <CardTitle>Solicitações</CardTitle>
+                    <CardDescription>Gerencie as solicitações feitas por pessoas físicas ou jurídicas.</CardDescription>
+                  </div>
+                  <Button onClick={fetchStudentRequests} variant="outline">Atualizar</Button>
+                </div>
               </CardHeader>
               <CardContent>
                 {getFilteredStudentRequests().length > 0 ? (
@@ -1666,7 +1902,13 @@ export default function CoordinatorAdminPage() {
                           <TableCell>
                             <div className="flex items-center">
                               <Calendar className="w-4 h-4 mr-2 text-muted-foreground" />
-                              {new Date(request.data).toLocaleDateString()}
+                              {request.createdAt
+                                ? new Date(request.createdAt).toLocaleDateString('pt-BR', {
+                                    day: '2-digit',
+                                    month: '2-digit',
+                                    year: 'numeric'
+                                  })
+                                : 'Sem data'}
                             </div>
                           </TableCell>
                           <TableCell>{getStatusBadgePT(request.status)}</TableCell>
@@ -1698,17 +1940,7 @@ export default function CoordinatorAdminPage() {
                   <CardTitle>Relatórios Semanais</CardTitle>
                   <CardDescription>Avalie os relatórios semanais enviados pelos alunos.</CardDescription>
                 </div>
-                <Select defaultValue="all" onValueChange={setStatusFilter} value={statusFilter}>
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="Filtrar por status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos os status</SelectItem>
-                    <SelectItem value="PENDING">Pendentes</SelectItem>
-                    <SelectItem value="APPROVED">Aprovados</SelectItem>
-                    <SelectItem value="REJECTED">Rejeitados</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Button onClick={fetchWeeklyReports} variant="outline">Atualizar</Button>
               </CardHeader>
               <CardContent>
                 {getFilteredWeeklyReports().length > 0 ? (
@@ -1720,7 +1952,7 @@ export default function CoordinatorAdminPage() {
                         <TableHead>Título</TableHead>
                         <TableHead>Semana</TableHead>
                         <TableHead>Data de Envio</TableHead>
-                        <TableHead>Status</TableHead>
+                        {/* <TableHead>Status</TableHead> */}
                         <TableHead>Ações</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -1737,7 +1969,7 @@ export default function CoordinatorAdminPage() {
                               {new Date(report.submissionDate).toLocaleDateString()}
                             </div>
                           </TableCell>
-                          <TableCell>{getStatusBadgePT(report.status)}</TableCell>
+                          {/* <TableCell>{getStatusBadgePT(report.status)}</TableCell> */}
                           <TableCell>
                             <Button size="sm" variant="outline" onClick={() => handleOpenReportModal(report.id)}>
                               Avaliar
@@ -1766,7 +1998,10 @@ export default function CoordinatorAdminPage() {
                   <CardTitle>Missões</CardTitle>
                   <CardDescription>Gerencie as missões atribuídas aos alunos.</CardDescription>
                 </div>
+                <div className="flex gap-2">
+                  <Button onClick={fetchMissions} variant="outline">Atualizar Lista</Button>
                 <Button onClick={handleOpenNewMissionModal}>Nova Missão</Button>
+                </div>
               </CardHeader>
               <CardContent>
                 {getFilteredAssignedMissions().length > 0 ? (
@@ -1782,18 +2017,18 @@ export default function CoordinatorAdminPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {getFilteredAssignedMissions().map((mission) => (
+                      {getFilteredAssignedMissions().map((mission: any) => (
                         <TableRow key={mission.id}>
                           <TableCell>#{mission.id}</TableCell>
-                          <TableCell>{mission.title}</TableCell>
-                          <TableCell>{mission.assignedTo}</TableCell>
+                          <TableCell>{mission.titulo || '-'}</TableCell>
+                          <TableCell>{missionStudentNames[Number(mission.usuarioId)] || '-'}</TableCell>
                           <TableCell>
                             <div className="flex items-center">
                               <Calendar className="w-4 h-4 mr-2 text-muted-foreground" />
-                              {new Date(mission.deadline).toLocaleDateString()}
+                              {mission.dataLimite ? new Date(mission.dataLimite).toLocaleDateString() : '-'}
                             </div>
                           </TableCell>
-                          <TableCell>{getStatusBadgePT(mission.status)}</TableCell>
+                          <TableCell>{mission.status ? getStatusBadgePT(mission.status) : '-'}</TableCell>
                           <TableCell>
                             <Button size="sm" variant="outline" onClick={() => handleOpenEditMissionModal(mission.id)}>
                               Editar
@@ -1840,7 +2075,7 @@ export default function CoordinatorAdminPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {getFilteredStudents().map((student) => (
+                    {getFilteredStudents(studentsInscritos).map((student) => (
                       <TableRow key={student.id}>
                         <TableCell>#{student.id}</TableCell>
                         <TableCell>{student.name}</TableCell>
@@ -1860,7 +2095,7 @@ export default function CoordinatorAdminPage() {
                     ))}
                   </TableBody>
                 </Table>
-                {getFilteredStudents().length === 0 && (
+                {getFilteredStudents(studentsInscritos).length === 0 && (
                   <div className="text-center py-4">
                     <p>Nenhum aluno encontrado com os filtros selecionados.</p>
                   </div>
@@ -2029,13 +2264,18 @@ export default function CoordinatorAdminPage() {
                       <div className="flex flex-wrap justify-center gap-6 mb-8 mt-2">
                         <Card className="w-64 shadow-sm">
                           <CardContent className="py-6 px-2 flex flex-col items-center justify-center">
-                            <div className="text-2xl font-bold">{disposalStats.total}</div>
+                            <div className="text-2xl font-bold">{disposals.length}</div>
                             <p className="text-xs text-muted-foreground mt-1">Total de Descartes</p>
                           </CardContent>
                         </Card>
                         <Card className="w-64 shadow-sm">
                           <CardContent className="py-6 px-2 flex flex-col items-center justify-center">
-                            <div className="text-2xl font-bold">{disposalStats.thisMonth}</div>
+                            <div className="text-2xl font-bold">{disposals.filter((disposal) => {
+                              const date = new Date(disposal.createdAt);
+                              const currentMonth = new Date().getMonth() + 1;
+                              const currentYear = new Date().getFullYear();
+                              return (date.getMonth() + 1) === currentMonth && date.getFullYear() === currentYear;
+                            }).length}</div>
                             <p className="text-xs text-muted-foreground mt-1">Descartes este Mês</p>
                           </CardContent>
                         </Card>
@@ -2044,12 +2284,48 @@ export default function CoordinatorAdminPage() {
                       <div className="mb-6">
                         <div className="flex justify-between items-center mb-4">
                           <h3 className="text-lg font-medium">Descartes por Mês</h3>
-                          <Select defaultValue={selectedYear.toString()} value={selectedYear.toString()} onValueChange={(value) => setSelectedYear(Number.parseInt(value))}>
-                            <SelectTrigger className="w-[120px]">
+                          <Select
+                            value={selectedMonth.toString()}
+                            onValueChange={(value) => {
+                              const newMonth = Number.parseInt(value);
+                              if (
+                                selectedYear > currentYear ||
+                                (selectedYear === currentYear && newMonth >= currentMonth)
+                              ) {
+                                setSelectedMonth(newMonth);
+                              }
+                            }}
+                          >
+                            <SelectTrigger className="w-[140px]">
+                              <SelectValue placeholder="Selecione o mês" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {Array.from({ length: 12 }, (_, i) => {
+                                if (selectedYear === currentYear && i < currentMonth) return null;
+                                return (
+                                  <SelectItem key={i} value={i.toString()}>
+                                    {new Date(2023, i).toLocaleString("default", { month: "long" })}
+                                  </SelectItem>
+                                );
+                              })}
+                            </SelectContent>
+                          </Select>
+                          <Select
+                            value={selectedYear.toString()}
+                            onValueChange={(value) => {
+                              const newYear = Number.parseInt(value);
+                              if (newYear > currentYear || newYear === currentYear) {
+                                setSelectedYear(newYear);
+                                if (newYear > currentYear) setSelectedMonth(0);
+                                if (newYear === currentYear && selectedMonth < currentMonth) setSelectedMonth(currentMonth);
+                              }
+                            }}
+                          >
+                            <SelectTrigger className="w-[100px]">
                               <SelectValue placeholder="Ano" />
                             </SelectTrigger>
                             <SelectContent>
-                              {[2023, 2024, 2025].map((year) => (
+                              {[2023, 2024, 2025].filter(year => year >= currentYear).map((year) => (
                                 <SelectItem key={year} value={year.toString()}>
                                   {year}
                                 </SelectItem>
@@ -2112,17 +2388,7 @@ export default function CoordinatorAdminPage() {
                               onChange={(e) => setSearchTerm(e.target.value)}
                               className="w-[250px]"
                             />
-                            <Select defaultValue="all" value={statusFilter} onValueChange={setStatusFilter}>
-                              <SelectTrigger className="w-[180px]">
-                                <SelectValue placeholder="Filtrar por status" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="all">Todos os status</SelectItem>
-                                <SelectItem value="concluido">Concluído</SelectItem>
-                                <SelectItem value="agendado">Agendado</SelectItem>
-                                <SelectItem value="processamento">Em processamento</SelectItem>
-                              </SelectContent>
-                            </Select>
+                            {/* Remover o Select de status aqui */}
                           </div>
                         </div>
 
@@ -2132,16 +2398,13 @@ export default function CoordinatorAdminPage() {
                               <TableHead>Data</TableHead>
                               <TableHead>Descrição do Descarte</TableHead>
                               <TableHead>Responsável</TableHead>
-                              <TableHead>Quantidade</TableHead>
-                              <TableHead>Destino</TableHead>
-                              <TableHead>Status</TableHead>
                               <TableHead>Ações</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
                             {getFilteredDisposals().length > 0 ? (
                               getFilteredDisposals().map((disposal) => {
-                                const studentInfo = getStudentInfo(disposal.alunoId)
+                                const studentInfo = getStudentInfo(disposal.usuarioId)
                                 return (
                                   <TableRow key={disposal.id}>
                                     <TableCell>
@@ -2152,27 +2415,6 @@ export default function CoordinatorAdminPage() {
                                     </TableCell>
                                     <TableCell>{disposal.descricao}</TableCell>
                                     <TableCell>{studentInfo.name}</TableCell>
-                                    <TableCell>{disposal.quantidade} itens</TableCell>
-                                    <TableCell>{disposal.metodoDeDescarte}</TableCell>
-                                    <TableCell>
-                                      <Badge
-                                        variant={
-                                          disposal.status === "COMPLETED" || disposal.status === "Concluído"
-                                            ? "success"
-                                            : disposal.status === "SCHEDULED" || disposal.status === "Agendado"
-                                              ? "outline"
-                                              : "default"
-                                        }
-                                      >
-                                        {disposal.status === "COMPLETED"
-                                          ? "Concluído"
-                                          : disposal.status === "SCHEDULED"
-                                            ? "Agendado"
-                                            : disposal.status === "IN_PROGRESS"
-                                              ? "Em processamento"
-                                              : disposal.status}
-                                      </Badge>
-                                    </TableCell>
                                     <TableCell>
                                       <Button
                                         size="sm"
@@ -2187,7 +2429,7 @@ export default function CoordinatorAdminPage() {
                               })
                             ) : (
                               <TableRow>
-                                <TableCell colSpan={7} className="text-center py-4">
+                                <TableCell colSpan={4} className="text-center py-4">
                                   Nenhum descarte encontrado com os filtros selecionados.
                                 </TableCell>
                               </TableRow>
@@ -2208,85 +2450,74 @@ export default function CoordinatorAdminPage() {
                   <CardDescription>Visualize estatísticas e dados sobre os equipamentos eletrônicos.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-6">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 mb-6">
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                       <Card>
-                        <CardContent className="pt-6">
-                          <div className="text-center">
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Total de Equipamentos</CardTitle>
+                      </CardHeader>
+                      <CardContent>
                             <div className="text-2xl font-bold">{electronics.length}</div>
-                            <p className="text-xs text-muted-foreground">Total de Equipamentos</p>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Funcionando</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold">
+                          {electronics.filter(e => e.situacao === "Em estoque").length}
                           </div>
                         </CardContent>
                       </Card>
                       <Card>
-                        <CardContent className="pt-6">
-                          <div className="text-center">
-                            <div className="text-2xl font-bold">187</div>
-                            <p className="text-xs text-muted-foreground">Funcionando</p>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Em Manutenção</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold">
+                          {electronics.filter(e => e.situacao === "Em manutenção").length}
                           </div>
                         </CardContent>
                       </Card>
                       <Card>
-                        <CardContent className="pt-6">
-                          <div className="text-center">
-                            <div className="text-2xl font-bold">155</div>
-                            <p className="text-xs text-muted-foreground">Para Reparo</p>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Em Uso</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold">
+                          {electronics.filter(e => e.situacao === "Em uso").length}
                           </div>
                         </CardContent>
                       </Card>
                     </div>
 
-                    <div className="mb-6">
+                  <div className="mt-8">
                       <div className="flex justify-between items-center mb-4">
-                        <h3 className="text-lg font-medium">Eletrônicos Cadastrados por Mês</h3>
-                        <Select defaultValue="2023">
-                          <SelectTrigger className="w-[120px]">
-                            <SelectValue placeholder="Ano" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="2023">2023</SelectItem>
-                            <SelectItem value="2022">2022</SelectItem>
-                            <SelectItem value="2021">2021</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        {["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho"].map((month, index) => (
-                          <Button
-                            key={index}
-                            variant="outline"
-                            className="h-auto py-6 flex flex-col items-center justify-center"
-                            onClick={() => (setActiveMonth ? setActiveMonth(month) : null)}
-                          >
-                            <span className="text-lg font-bold">{month}</span>
-                            <span className="text-sm text-muted-foreground mt-1">2023</span>
-                            <span className="text-xs bg-primary/10 px-2 py-1 rounded-full mt-2">
-                              {[24, 36, 42, 28, 35, 18][index]} eletrônicos
-                            </span>
-                          </Button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div>
-                      <div className="flex justify-between items-center mb-4">
-                        <h3 className="text-lg font-medium">Eletrônicos de {activeMonth} 2023</h3>
+                      <h3 className="text-lg font-medium">Lista de Eletrônicos</h3>
                         <div className="flex gap-2">
                           <Input
-                            placeholder="Pesquisar..."
+                            placeholder="Pesquisar por nome..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                             className="w-[250px]"
                           />
-                          <Select defaultValue="all">
+                          <Select defaultValue="all" value={statusFilter} onValueChange={setStatusFilter}>
                             <SelectTrigger className="w-[180px]">
-                              <SelectValue placeholder="Filtrar por status" />
+                              <SelectValue placeholder="Filtrar por tipo" />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="all">Todos os status</SelectItem>
-                              <SelectItem value="funcionando">Funcionando</SelectItem>
-                              <SelectItem value="reparo">Para Reparo</SelectItem>
-                              <SelectItem value="descarte">Para Descarte</SelectItem>
+                              <SelectItem value="all">Todos os tipos</SelectItem>
+                              <SelectItem value="Teclado">Teclado</SelectItem>
+                              <SelectItem value="HD">HD</SelectItem>
+                              <SelectItem value="Fonte de Alimentação">Fonte de Alimentação</SelectItem>
+                              <SelectItem value="Gabinete">Gabinete</SelectItem>
+                              <SelectItem value="Monitor">Monitor</SelectItem>
+                              <SelectItem value="Mouse">Mouse</SelectItem>
+                              <SelectItem value="Estabilizador">Estabilizador</SelectItem>
+                              <SelectItem value="Impressora">Impressora</SelectItem>
+                              <SelectItem value="Placa Mãe">Placa Mãe</SelectItem>
+                              <SelectItem value="Notebook">Notebook</SelectItem>
+                              <SelectItem value="Processador">Processador</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
@@ -2295,114 +2526,57 @@ export default function CoordinatorAdminPage() {
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            <TableHead>Data Cadastro</TableHead>
-                            <TableHead>Equipamento</TableHead>
-                            <TableHead>Número de Série</TableHead>
-                            <TableHead>Condição</TableHead>
-                            <TableHead>Origem</TableHead>
-                            <TableHead>Status</TableHead>
+                            <TableHead>ID</TableHead>
+                            <TableHead>Nome</TableHead>
+                            <TableHead>Tipo</TableHead>
+                            <TableHead>Modelo</TableHead>
+                            <TableHead>Estado</TableHead>
+                            <TableHead>Situação</TableHead>
                             <TableHead>Ações</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          <TableRow>
-                            <TableCell>25/05/2023</TableCell>
-                            <TableCell>Laptop Dell Latitude E6440</TableCell>
-                            <TableCell>DL7890123</TableCell>
-                            <TableCell>Funcional - Bateria fraca</TableCell>
-                            <TableCell>Doação - Empresa XYZ</TableCell>
-                            <TableCell>
-                              <Badge variant="success">Disponível</Badge>
-                            </TableCell>
-                            <TableCell>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleOpenElectronicModal(1, "notebook")}
-                              >
-                                Ver Detalhes
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                          <TableRow>
-                            <TableCell>22/05/2023</TableCell>
-                            <TableCell>Monitor LG 24" LED</TableCell>
-                            <TableCell>LG1234567</TableCell>
-                            <TableCell>Funcional - Perfeito</TableCell>
-                            <TableCell>Doação - Carlos Eduardo</TableCell>
-                            <TableCell>
-                              <Badge variant="outline">Reservado</Badge>
-                            </TableCell>
-                            <TableCell>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleOpenElectronicModal(2, "monitor")}
-                              >
-                                Ver Detalhes
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                          <TableRow>
-                            <TableCell>18/05/2023</TableCell>
-                            <TableCell>Desktop HP EliteDesk 800</TableCell>
-                            <TableCell>HP4567890</TableCell>
-                            <TableCell>Funcional - Completo</TableCell>
-                            <TableCell>Doação - Instituto Tecnologia</TableCell>
-                            <TableCell>
-                              <Badge>Em manutenção</Badge>
-                            </TableCell>
-                            <TableCell>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleOpenElectronicModal(3, "desktop")}
-                              >
-                                Ver Detalhes
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                          <TableRow>
-                            <TableCell>15/05/2023</TableCell>
-                            <TableCell>Impressora Brother MFC-L2740DW</TableCell>
-                            <TableCell>BR7654321</TableCell>
-                            <TableCell>Necessita reparo - Sem toner</TableCell>
-                            <TableCell>Doação - Escola Municipal</TableCell>
-                            <TableCell>
-                              <Badge>Em avaliação</Badge>
-                            </TableCell>
-                            <TableCell>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleOpenElectronicModal(4, "impressora")}
-                              >
-                                Ver Detalhes
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                          <TableRow>
-                            <TableCell>10/05/2023</TableCell>
-                            <TableCell>Tablet Samsung Galaxy Tab A</TableCell>
-                            <TableCell>SM9876543</TableCell>
-                            <TableCell>Funcional - Tela trincada</TableCell>
-                            <TableCell>Doação - Ana Beatriz</TableCell>
-                            <TableCell>
-                              <Badge variant="success">Disponível</Badge>
-                            </TableCell>
-                            <TableCell>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleOpenElectronicModal(5, "tablet")}
-                              >
-                                Ver Detalhes
-                              </Button>
-                            </TableCell>
-                          </TableRow>
+                          {getFilteredElectronics().length > 0 ? (
+                            getFilteredElectronics().map((electronic) => (
+                              <TableRow key={`${electronic.tipo}-${electronic.id}`}>
+                                <TableCell>#{electronic.id}</TableCell>
+                                <TableCell>{electronic.nome}</TableCell>
+                                <TableCell>{electronic.tipo}</TableCell>
+                                <TableCell>{electronic.modelo || "N/A"}</TableCell>
+                                <TableCell>{electronic.status || "N/A"}</TableCell>
+                                <TableCell>
+                                  <Badge
+                                    variant={
+                                      electronic.situacao === "Em estoque"
+                                        ? "secondary"
+                                        : electronic.situacao === "Em manutenção"
+                                        ? "default"
+                                        : "outline"
+                                    }
+                                  >
+                                    {electronic.situacao}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleOpenElectronicModal(electronic.id, electronic.tipo)}
+                                  >
+                                    Ver Detalhes
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            ))
+                          ) : (
+                            <TableRow>
+                              <TableCell colSpan={7} className="text-center py-4">
+                                Nenhum eletrônico encontrado com os filtros selecionados.
+                              </TableCell>
+                            </TableRow>
+                          )}
                         </TableBody>
                       </Table>
-                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -2523,7 +2697,7 @@ export default function CoordinatorAdminPage() {
                   <CardTitle>Horários dos Alunos</CardTitle>
                   <CardDescription>Gerencie os horários de atendimento dos alunos.</CardDescription>
                 </div>
-                <Button onClick={handleOpenNewScheduleModal}>Adicionar Horário</Button>
+                <Button variant="outline" onClick={handleRefreshAlunos}>Atualizar</Button>
               </CardHeader>
               <CardContent>
                 <Table>
@@ -2538,76 +2712,54 @@ export default function CoordinatorAdminPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    <TableRow>
-                      <TableCell>Segunda-feira</TableCell>
-                      <TableCell>08:00 - 12:00</TableCell>
-                      <TableCell>João Silva</TableCell>
+                    {students.length > 0 ? (
+                      students.flatMap(student => {
+                        const facapeDias = "Segunda-feira, Terça-feira, Quarta-feira, Quinta-feira, Sexta-feira, Sábado"
+                        if ((student.bolsistaTipo === "FACAPE" || student.bolsistaTipo === "bolsista_facape") && student.dias && student.dias.replace(/\s/g, "") === facapeDias.replace(/\s/g, "")) {
+                          // Mostrar apenas uma linha para FACAPE com todos os dias
+                          return [
+                            <TableRow key={student.id + '-facape'}>
+                              <TableCell>SegundaÁSábado</TableCell>
+                              <TableCell>{student.horario && student.horario.trim() !== "" ? student.horario : "Não definido"}</TableCell>
+                              <TableCell>{student.name}</TableCell>
                       <TableCell>
-                        <Badge variant="outline">Bolsista FACAPE</Badge>
+                                <Badge variant="outline">{student.bolsistaTipo || "N/A"}</Badge>
                       </TableCell>
-                      <TableCell>Técnico de Manutenção</TableCell>
+                              <TableCell>{student.cargo || "Não definido"}</TableCell>
                       <TableCell>
-                        <Button size="sm" variant="outline" onClick={() => handleOpenEditScheduleModal(1)}>
+                                <Button size="sm" variant="outline" onClick={() => handleOpenEditScheduleModal(student.id)}>
                           Editar
                         </Button>
                       </TableCell>
                     </TableRow>
-                    <TableRow>
-                      <TableCell>Segunda-feira</TableCell>
-                      <TableCell>14:00 - 18:00</TableCell>
-                      <TableCell>Maria Santos</TableCell>
+                          ]
+                        } else {
+                          // Caso normal: uma linha por dia
+                          return (student.dias ? student.dias.split(',').map(dia => dia.trim()) : [""]).map(dia => (
+                            <TableRow key={student.id + '-' + dia}>
+                              <TableCell>{dia || "Não definido"}</TableCell>
+                              <TableCell>{student.horario && student.horario.trim() !== "" ? student.horario : "Não definido"}</TableCell>
+                              <TableCell>{student.name}</TableCell>
                       <TableCell>
-                        <Badge variant="outline">Bolsista FACAPE</Badge>
+                                <Badge variant="outline">{student.bolsistaTipo || "N/A"}</Badge>
                       </TableCell>
-                      <TableCell>Atendente</TableCell>
+                              <TableCell>{student.cargo || "Não definido"}</TableCell>
                       <TableCell>
-                        <Button size="sm" variant="outline" onClick={() => handleOpenEditScheduleModal(2)}>
+                                <Button size="sm" variant="outline" onClick={() => handleOpenEditScheduleModal(student.id)}>
                           Editar
                         </Button>
                       </TableCell>
                     </TableRow>
+                          ))
+                        }
+                      })
+                    ) : (
                     <TableRow>
-                      <TableCell>Terça-feira</TableCell>
-                      <TableCell>08:00 - 12:00</TableCell>
-                      <TableCell>Pedro Oliveira</TableCell>
-                      <TableCell>
-                        <Badge variant="outline">ProUni</Badge>
-                      </TableCell>
-                      <TableCell>Catalogador</TableCell>
-                      <TableCell>
-                        <Button size="sm" variant="outline" onClick={() => handleOpenEditScheduleModal(3)}>
-                          Editar
-                        </Button>
+                        <TableCell colSpan={6} className="text-center py-4">
+                          Nenhum aluno encontrado.
                       </TableCell>
                     </TableRow>
-                    <TableRow>
-                      <TableCell>Terça-feira</TableCell>
-                      <TableCell>14:00 - 18:00</TableCell>
-                      <TableCell>Ana Costa</TableCell>
-                      <TableCell>
-                        <Badge variant="outline">Regular</Badge>
-                      </TableCell>
-                      <TableCell>Auxiliar Administrativo</TableCell>
-                      <TableCell>
-                        <Button size="sm" variant="outline" onClick={() => handleOpenEditScheduleModal(4)}>
-                          Editar
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>Quarta-feira</TableCell>
-                      <TableCell>08:00 - 12:00</TableCell>
-                      <TableCell>Carlos Souza</TableCell>
-                      <TableCell>
-                        <Badge variant="outline">ProUni</Badge>
-                      </TableCell>
-                      <TableCell>Técnico de Reparo</TableCell>
-                      <TableCell>
-                        <Button size="sm" variant="outline" onClick={() => handleOpenEditScheduleModal(5)}>
-                          Editar
-                        </Button>
-                      </TableCell>
-                    </TableRow>
+                    )}
                   </TableBody>
                 </Table>
               </CardContent>
@@ -2623,27 +2775,6 @@ export default function CoordinatorAdminPage() {
               <CardContent>
                 <div className="space-y-6">
                   <div>
-                    <Label className="text-base font-medium block mb-3">Selecione os dias sem funcionamento</Label>
-                    <div className="grid grid-cols-7 gap-3 mt-2">
-                      {["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"].map((day, index) => (
-                        <div key={index} className="flex flex-col items-center">
-                          <div
-                            className={`h-12 w-12 rounded-full flex items-center justify-center cursor-pointer border-2 ${
-                              index === 0 || index === 6
-                                ? "bg-red-100 text-red-600 border-red-300"
-                                : "bg-background border-muted-foreground/20 hover:border-red-300 hover:bg-red-50"
-                            }`}
-                          >
-                            {day.charAt(0)}
-                          </div>
-                          <span className="text-xs mt-1 text-muted-foreground">{day}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <p className="text-sm text-muted-foreground mt-3">
-                      Nota: O RECOM não funciona aos sábados e domingos. Selecione dias adicionais de fechamento, como
-                      feriados ou dias de manutenção.
-                    </p>
                   </div>
 
                   <div className="border rounded-lg p-5 bg-muted/10">
@@ -2655,28 +2786,45 @@ export default function CoordinatorAdminPage() {
                       <div className="flex gap-2">
                         <Select
                           value={selectedMonth.toString()}
-                          onValueChange={(value) => setSelectedMonth(Number.parseInt(value))}
+                          onValueChange={(value) => {
+                            const newMonth = Number.parseInt(value);
+                            if (
+                              selectedYear > currentYear ||
+                              (selectedYear === currentYear && newMonth >= currentMonth)
+                            ) {
+                              setSelectedMonth(newMonth);
+                            }
+                          }}
                         >
                           <SelectTrigger className="w-[140px]">
                             <SelectValue placeholder="Selecione o mês" />
                           </SelectTrigger>
                           <SelectContent>
-                            {Array.from({ length: 12 }, (_, i) => (
+                            {Array.from({ length: 12 }, (_, i) => {
+                              if (selectedYear === currentYear && i < currentMonth) return null;
+                              return (
                               <SelectItem key={i} value={i.toString()}>
                                 {new Date(2023, i).toLocaleString("default", { month: "long" })}
                               </SelectItem>
-                            ))}
+                              );
+                            })}
                           </SelectContent>
                         </Select>
                         <Select
                           value={selectedYear.toString()}
-                          onValueChange={(value) => setSelectedYear(Number.parseInt(value))}
+                          onValueChange={(value) => {
+                            const newYear = Number.parseInt(value);
+                            if (newYear > currentYear || (newYear === currentYear && selectedMonth >= currentMonth)) {
+                              setSelectedYear(newYear);
+                              if (newYear > currentYear) setSelectedMonth(0);
+                            }
+                          }}
                         >
                           <SelectTrigger className="w-[100px]">
                             <SelectValue placeholder="Ano" />
                           </SelectTrigger>
                           <SelectContent>
-                            {[2023, 2024, 2025].map((year) => (
+                            {[2023, 2024, 2025].filter(year => year >= currentYear).map((year) => (
                               <SelectItem key={year} value={year.toString()}>
                                 {year}
                               </SelectItem>
@@ -2716,24 +2864,18 @@ export default function CoordinatorAdminPage() {
                           days.push(
                             <div
                               key={day}
-                              className={`h-9 text-xs flex items-center justify-center rounded cursor-pointer transition-colors ${
-                                isWeekend
-                                  ? "bg-red-100 text-red-600"
+                              className={`h-9 text-xs flex items-center justify-center rounded cursor-pointer transition-colors
+                                ${isWeekend
+                                  ? "bg-red-100 text-red-600 cursor-not-allowed"
                                   : isClosed
-                                    ? "bg-red-100 text-red-600"
-                                    : "bg-green-100 text-green-600 hover:bg-red-50"
-                              }`}
-                              onClick={() => {
-                                if (!isWeekend) {
-                                  const newClosedDates = new Set(closedDates)
-                                  if (isClosed) {
-                                    newClosedDates.delete(dateString)
-                                  } else {
-                                    newClosedDates.add(dateString)
-                                  }
-                                  setClosedDates(newClosedDates)
-                                }
-                              }}
+                                    ? datesToDelete.has(dateString)
+                                      ? "bg-red-100 text-red-600 border-2 border-red-500 line-through"
+                                      : "bg-red-100 text-red-600"
+                                    : datesToCreate.has(dateString)
+                                      ? "bg-blue-100 text-blue-600 border-2 border-blue-500"
+                                      : "bg-green-100 text-green-600 hover:bg-blue-50"}
+                              `}
+                              onClick={() => !isWeekend && handleDayClick(date, isClosed, isWeekend)}
                             >
                               {day}
                             </div>,
@@ -2762,12 +2904,13 @@ export default function CoordinatorAdminPage() {
                       <h3 className="text-sm font-medium mb-3">Calendário Anual - {selectedYear}</h3>
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                         {Array.from({ length: 12 }, (_, monthIndex) => {
+                          // Só renderizar meses a partir do mês atual no ano atual
+                          if (selectedYear === currentYear && monthIndex < currentMonth) return null;
                           const monthName = new Date(selectedYear, monthIndex).toLocaleString("default", {
                             month: "long",
                           })
                           const daysInMonth = new Date(selectedYear, monthIndex + 1, 0).getDate()
                           const firstDayOfMonth = new Date(selectedYear, monthIndex, 1).getDay()
-
                           return (
                             <div key={monthIndex} className="border rounded p-2">
                               <div className="text-xs font-medium mb-2 capitalize">{monthName}</div>
@@ -2777,12 +2920,10 @@ export default function CoordinatorAdminPage() {
                                     {day}
                                   </div>
                                 ))}
-
                                 {/* Espaços vazios para os dias antes do primeiro dia do mês */}
                                 {Array.from({ length: firstDayOfMonth }, (_, i) => (
                                   <div key={`empty-${i}`} className="h-5"></div>
                                 ))}
-
                                 {/* Dias do mês */}
                                 {Array.from({ length: daysInMonth }, (_, i) => {
                                   const day = i + 1
@@ -2791,32 +2932,21 @@ export default function CoordinatorAdminPage() {
                                   const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
                                   const dateString = date.toISOString().split("T")[0]
                                   const isClosed = closedDates.has(dateString)
-
                                   return (
                                     <div
                                       key={day}
-                                      className={`h-5 text-[10px] flex items-center justify-center rounded-sm cursor-pointer ${
-                                        isWeekend || isClosed
-                                          ? "bg-red-100 text-red-600"
-                                          : "bg-green-100 text-green-600"
-                                      }`}
-                                      onClick={() => {
-                                        if (!isWeekend) {
-                                          const newClosedDates = new Set(closedDates)
-                                          if (isClosed) {
-                                            newClosedDates.delete(dateString)
-                                          } else {
-                                            newClosedDates.add(dateString)
-                                          }
-                                          setClosedDates(newClosedDates)
-
-                                          // Se o mês clicado não é o mês atualmente exibido no calendário principal,
-                                          // atualizar para mostrar esse mês
-                                          if (monthIndex !== selectedMonth) {
-                                            setSelectedMonth(monthIndex)
-                                          }
-                                        }
-                                      }}
+                                      className={`h-5 text-[10px] flex items-center justify-center rounded-sm cursor-pointer transition-colors
+                                        ${isWeekend
+                                          ? "bg-red-100 text-red-600 cursor-not-allowed"
+                                          : isClosed
+                                            ? datesToDelete.has(dateString)
+                                              ? "bg-red-100 text-red-600 border-2 border-red-500 line-through"
+                                              : "bg-red-100 text-red-600"
+                                            : datesToCreate.has(dateString)
+                                              ? "bg-blue-100 text-blue-600 border-2 border-blue-500"
+                                              : "bg-green-100 text-green-600 hover:bg-blue-50"}
+                                        `}
+                                      onClick={() => !isWeekend && handleDayClick(date, isClosed, isWeekend)}
                                     >
                                       {day}
                                     </div>
@@ -2832,37 +2962,59 @@ export default function CoordinatorAdminPage() {
                     <div className="border rounded-lg p-4">
                       <h3 className="text-sm font-medium mb-3">Dias sem Funcionamento Selecionados</h3>
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                        {/* Datas já fechadas */}
                         {Array.from(closedDates)
                           .sort()
                           .map((dateString) => {
-                            const date = new Date(dateString)
-                            const isWeekend = date.getDay() === 0 || date.getDay() === 6
-
-                            // Não mostrar finais de semana na lista, pois já são fechados por padrão
-                            if (isWeekend) return null
-
-                            return (
-                              <div key={dateString} className="flex items-center justify-between border rounded p-2">
-                                <span className="text-sm">
-                                  {date.toLocaleDateString("pt-BR", {
+                            // Procurar a data original do backend para exibir exatamente como está salva
+                            const backendDataObj = Array.isArray(backendDates) ? backendDates.find((d: any) => {
+                              const onlyDate = d.data.split('T')[0];
+                              return onlyDate === dateString;
+                            }) : null;
+                            const backendDate = backendDataObj ? backendDataObj.data : dateString;
+                            const onlyDate = backendDate.split('T')[0];
+                            const [year, month, day] = onlyDate.split('-');
+                            // Cria um objeto Date só para formatar, sem ajuste de fuso
+                            const formatted = new Date(`${onlyDate}T00:00:00`).toLocaleDateString("pt-BR", {
                                     weekday: "short",
                                     day: "2-digit",
                                     month: "short",
                                     year: "numeric",
-                                  })}
-                                </span>
+                            });
+                            const isWeekendClosed = new Date(`${onlyDate}T00:00:00`).getDay() === 0 || new Date(`${onlyDate}T00:00:00`).getDay() === 6;
+                            if (isWeekendClosed) return null;
+                            return (
+                              <div key={dateString} className="flex items-center justify-between border rounded p-2">
+                                <span className={`text-sm ${datesToDelete.has(dateString) ? "line-through text-red-500" : ""}`}>{formatted}</span>
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  className="h-6 w-6 p-0 text-red-500"
-                                  onClick={() => {
-                                    const newClosedDates = new Set(closedDates)
-                                    newClosedDates.delete(dateString)
-                                    setClosedDates(newClosedDates)
-                                  }}
+                                  className={`h-6 w-6 p-0 ${datesToDelete.has(dateString) ? "border border-red-500" : "text-red-500"}`}
+                                  onClick={() => handleDeleteMark(dateString)}
                                 >
                                   ×
                                 </Button>
+                              </div>
+                            )
+                          })}
+                        {/* Datas para criar (que ainda não estão fechadas) */}
+                        {Array.from(datesToCreate)
+                          .filter(dateString => !closedDates.has(dateString))
+                          .sort()
+                          .map(dateString => {
+                            const onlyDate = dateString;
+                            const [year, month, day] = onlyDate.split('-');
+                            const formatted = new Date(`${onlyDate}T00:00:00`).toLocaleDateString("pt-BR", {
+                              weekday: "short",
+                              day: "2-digit",
+                              month: "short",
+                              year: "numeric",
+                            });
+                            const isWeekendCreate = new Date(`${onlyDate}T00:00:00`).getDay() === 0 || new Date(`${onlyDate}T00:00:00`).getDay() === 6;
+                            if (isWeekendCreate) return null;
+                            return (
+                              <div key={dateString} className="flex items-center justify-between border rounded p-2 bg-blue-50">
+                                <span className="text-sm text-blue-600 font-semibold">{formatted}</span>
                               </div>
                             )
                           })}
@@ -2879,7 +3031,7 @@ export default function CoordinatorAdminPage() {
                   </div>
 
                   <div className="flex justify-end">
-                    <Button>Salvar Alterações</Button>
+                    <Button onClick={handleSaveChanges}>Salvar Alterações</Button>
                   </div>
                 </div>
               </CardContent>
@@ -2937,14 +3089,14 @@ export default function CoordinatorAdminPage() {
         <MissionFormModal
           isOpen={isMissionFormOpen}
           onClose={() => setIsMissionFormOpen(false)}
-          missionId={selectedMission}
+          missionId={selectedMission ?? undefined}
         />
       )}
       {isScheduleFormOpen && (
         <ScheduleFormModal
           isOpen={isScheduleFormOpen}
           onClose={() => setIsScheduleFormOpen(false)}
-          scheduleId={selectedSchedule}
+          scheduleId={selectedSchedule ?? undefined}
         />
       )}
     </div>

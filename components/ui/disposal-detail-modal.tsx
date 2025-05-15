@@ -1,248 +1,194 @@
 "use client"
 
-import type React from "react"
-
 import { useState, useEffect } from "react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Calendar, User, FileText, Tag, Package, Info, Truck, Recycle } from "lucide-react"
-import { Separator } from "@/components/ui/separator"
-import { Textarea } from "@/components/ui/textarea"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { ElectronicDetailModal } from "@/components/ui/electronic-detail-modal"
 
-interface DisposalDetailModalProps {
-  isOpen: boolean
-  onClose: () => void
-  disposalId: number
+// Componente auxiliar para exibir eletrônico com imagem
+function ElectronicWithImage({ catKey, electronic }: { catKey: string, electronic: any }) {
+  const [imgUrl, setImgUrl] = useState<string | null>(null);
+  useEffect(() => {
+    const imageEndpointMap: Record<string, string> = {
+      teclados: "teclado",
+      hds: "hd",
+      fontesDeAlimentacao: "fonteDeAlimentacao",
+      gabinetes: "gabinete",
+      monitores: "monitor",
+      mouses: "mouse",
+      estabilizadores: "estabilizado",
+      impressoras: "impressora",
+      placasMae: "placaMae",
+      notebooks: "notebook",
+      processadores: "processador",
+    };
+    const endpoint = imageEndpointMap[catKey];
+    if (!endpoint) return;
+    let mounted = true;
+    const url = `http://localhost:3456/imagens/${endpoint}/${electronic.id}`;
+    fetch(url)
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (!mounted) return;
+        let caminho = null;
+        if (Array.isArray(data) && data.length > 0) {
+          caminho = data[0].url || data[0].caminho;
+        } else if (data && (data.url || data.caminho)) {
+          caminho = data.url || data.caminho;
+        }
+        if (caminho) {
+          if (!caminho.startsWith('/')) caminho = '/' + caminho;
+          setImgUrl(`http://localhost:3456${caminho}`);
+        } else {
+          setImgUrl(null);
+        }
+      })
+      .catch(() => setImgUrl(null));
+    return () => { mounted = false; };
+  }, [catKey, electronic.id]);
+  return (
+    <li className="mb-1 flex items-center gap-3">
+      <img src={imgUrl || "/placeholder.svg"} alt={electronic.nome || electronic.name || `ID ${electronic.id}`} className="w-12 h-12 object-cover rounded border" />
+      <div>
+        <span className="font-medium">{electronic.nome || electronic.name || `ID ${electronic.id}`}</span>
+        {electronic.modelo && <span className="ml-2 text-gray-500">Modelo: {electronic.modelo}</span>}
+        {electronic.marca && <span className="ml-2 text-gray-500">Marca: {electronic.marca}</span>}
+        {electronic.serialNumber && <span className="ml-2 text-gray-500">S/N: {electronic.serialNumber}</span>}
+      </div>
+    </li>
+  );
 }
 
-interface DisposalDetails {
-  id: number
-  description: string
-  items: string
-  quantity: number
-  weight?: string
-  disposalMethod: string
-  destination: string
-  responsiblePerson: string
-  additionalInfo?: string
-  disposalDate: string
-  scheduledDate?: string
-  status: string
-}
-
-export function DisposalDetailModal({ isOpen, onClose, disposalId }: DisposalDetailModalProps) {
-  const [loading, setLoading] = useState(true)
-  const [details, setDetails] = useState<DisposalDetails | null>(null)
-  const [feedback, setFeedback] = useState("")
-  const [newStatus, setNewStatus] = useState("")
+export function DisposalDetailModal({ isOpen, onClose, disposalId }: { isOpen: boolean, onClose: () => void, disposalId?: number }) {
+  const [disposal, setDisposal] = useState<any | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [electronics, setElectronics] = useState<any[]>([]);
+  const [isElectronicsModalOpen, setIsElectronicsModalOpen] = useState(false);
+  const [selectedElectronic, setSelectedElectronic] = useState<{ id: number, type: string } | null>(null);
+  const [isElectronicDetailModalOpen, setIsElectronicDetailModalOpen] = useState(false);
 
   useEffect(() => {
-    if (isOpen && disposalId) {
-      setLoading(true)
-      // Simulação de carregamento de dados
-      setTimeout(() => {
-        // Dados simulados de descarte
-        const mockDetails: DisposalDetails = {
-          id: disposalId,
-          description: [
-            "Lote de equipamentos obsoletos (monitores CRT, teclados antigos)",
-            "Baterias e componentes com metais pesados",
-            "Placas-mãe danificadas e componentes eletrônicos diversos",
-            "Equipamentos com danos irreparáveis (impressoras, scanners)",
-            "Cabos, fontes de alimentação e periféricos diversos",
-          ][disposalId % 5],
-          items: [
-            "Monitores CRT, teclados antigos, gabinetes",
-            "Baterias, pilhas, componentes com chumbo",
-            "Placas-mãe, processadores, memórias",
-            "Impressoras, scanners, faxes",
-            "Cabos, fontes de alimentação, periféricos",
-          ][disposalId % 5],
-          quantity: 8 + (disposalId % 20),
-          weight: 5 + (disposalId % 15) + " kg",
-          disposalMethod: [
-            "Reciclagem especializada",
-            "Descarte ecológico",
-            "Reciclagem de componentes",
-            "Separação de materiais",
-            "Processamento industrial",
-          ][disposalId % 5],
-          destination: [
-            "Reciclagem Tecnológica SA",
-            "EcoDescarte Ltda",
-            "Reciclagem Tecnológica SA",
-            "EcoDescarte Ltda",
-            "Reciclagem Tecnológica SA",
-          ][disposalId % 5],
-          responsiblePerson: ["Ana Silva", "Carlos Mendes", "Pedro Santos", "Mariana Costa", "Lucas Oliveira"][
-            disposalId % 5
-          ],
-          additionalInfo:
-            "Todos os itens foram devidamente catalogados e preparados para descarte conforme normas ambientais.",
-          disposalDate: new Date(2023, 4, 10 + disposalId).toISOString(),
-          scheduledDate: new Date(2023, 4, 5 + disposalId).toISOString(),
-          status: ["Concluído", "Agendado", "Em processamento", "Concluído", "Agendado"][disposalId % 5],
-        }
-
-        setDetails(mockDetails)
-        setNewStatus(mockDetails.status)
-        setLoading(false)
-      }, 1000)
-    }
-  }, [isOpen, disposalId])
-
-  const getStatusBadge = (status: string) => {
-    const variants = {
-      Concluído: { variant: "success", label: "Concluído" },
-      Agendado: { variant: "outline", label: "Agendado" },
-      "Em processamento": { variant: "default", label: "Em processamento" },
-    }
-    const statusInfo = variants[status as keyof typeof variants] || { variant: "default", label: status }
-    return <Badge variant={statusInfo.variant as any}>{statusInfo.label}</Badge>
-  }
-
-  const handleStatusChange = () => {
-    // Simulação de atualização de status
-    console.log(`Atualizando status do descarte ${disposalId} para ${newStatus}`)
-    console.log(`Feedback: ${feedback}`)
-
-    // Atualiza o status no objeto de detalhes
-    if (details) {
-      setDetails({
-        ...details,
-        status: newStatus,
+    if (!isOpen || !disposalId) return;
+    setLoading(true);
+    // Buscar detalhes do descarte
+    fetch(`http://localhost:3456/descartes/${disposalId}`)
+      .then(res => res.json())
+      .then(data => setDisposal(data))
+      .catch(() => setDisposal(null));
+    // Buscar eletrônicos de todas as categorias
+    const endpoints = [
+      { key: "teclados", url: "teclados", label: "Teclados" },
+      { key: "hds", url: "hds", label: "HDs" },
+      { key: "estabilizadores", url: "estabilizadores", label: "Estabilizadores" },
+      { key: "monitores", url: "monitores", label: "Monitores" },
+      { key: "mouses", url: "mouses", label: "Mouses" },
+      { key: "gabinetes", url: "gabinetes", label: "Gabinetes" },
+      { key: "impressoras", url: "impressoras", label: "Impressoras" },
+      { key: "placasMae", url: "placasMae", label: "Placas Mãe" },
+      { key: "notebooks", url: "notebooks", label: "Notebooks" },
+      { key: "processadores", url: "processadores", label: "Processadores" },
+    ];
+    Promise.all(
+      endpoints.map(async (ep) => {
+        const res = await fetch(`http://localhost:3456/descartes/${disposalId}/${ep.url}`);
+        if (!res.ok) return { key: ep.key, label: ep.label, items: [] };
+        const data = await res.json();
+        return { key: ep.key, label: ep.label, items: Array.isArray(data) ? data.map(item => ({ ...item, tipoCategoria: ep.key })) : [] };
       })
-    }
+    ).then((all) => setElectronics(all));
+    setLoading(false);
+  }, [isOpen, disposalId]);
 
-    // Fecha o modal após um breve delay para mostrar a atualização
-    setTimeout(() => {
-      onClose()
-    }, 1000)
-  }
-
-  const renderDetailItem = (icon: React.ReactNode, label: string, value: string | number | undefined) => {
-    if (!value) return null
-    return (
-      <div className="flex items-start gap-2 mb-3">
-        <div className="mt-0.5">{icon}</div>
-        <div>
-          <div className="text-sm font-medium">{label}</div>
-          <div className="text-sm text-muted-foreground">{value}</div>
-        </div>
-      </div>
-    )
-  }
+  // Verifica se há algum eletrônico em qualquer categoria
+  const hasAnyElectronics = electronics.some(cat => cat.items && cat.items.length > 0);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-        {loading ? (
-          <div className="py-8 text-center">Carregando detalhes do descarte...</div>
-        ) : details ? (
-          <>
-            <DialogHeader>
-              <div className="flex justify-between items-start">
-                <DialogTitle>Detalhes do Descarte</DialogTitle>
-                {details.status && getStatusBadge(details.status)}
-              </div>
-              <DialogDescription>
-                ID: #{details.id} | Data: {new Date(details.disposalDate).toLocaleDateString()}
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
-              <div className="space-y-4">
-                <h3 className="text-sm font-medium">Informações Básicas</h3>
-                {renderDetailItem(
-                  <FileText className="h-4 w-4 text-muted-foreground" />,
-                  "Descrição",
-                  details.description,
-                )}
-                {renderDetailItem(<Package className="h-4 w-4 text-muted-foreground" />, "Itens", details.items)}
-                {renderDetailItem(
-                  <Tag className="h-4 w-4 text-muted-foreground" />,
-                  "Quantidade",
-                  details.quantity + " itens",
-                )}
-                {details.weight &&
-                  renderDetailItem(<Tag className="h-4 w-4 text-muted-foreground" />, "Peso Total", details.weight)}
-                {renderDetailItem(
-                  <Calendar className="h-4 w-4 text-muted-foreground" />,
-                  "Data do Descarte",
-                  new Date(details.disposalDate).toLocaleDateString(),
-                )}
-                {details.scheduledDate &&
-                  renderDetailItem(
-                    <Calendar className="h-4 w-4 text-muted-foreground" />,
-                    "Data Agendada",
-                    new Date(details.scheduledDate).toLocaleDateString(),
-                  )}
-              </div>
-
-              <div className="space-y-4">
-                <h3 className="text-sm font-medium">Detalhes do Processo</h3>
-                {renderDetailItem(
-                  <Recycle className="h-4 w-4 text-muted-foreground" />,
-                  "Método de Descarte",
-                  details.disposalMethod,
-                )}
-                {renderDetailItem(<Truck className="h-4 w-4 text-muted-foreground" />, "Destino", details.destination)}
-                {renderDetailItem(
-                  <User className="h-4 w-4 text-muted-foreground" />,
-                  "Responsável",
-                  details.responsiblePerson,
-                )}
-                {details.additionalInfo &&
-                  renderDetailItem(
-                    <Info className="h-4 w-4 text-muted-foreground" />,
-                    "Informações Adicionais",
-                    details.additionalInfo,
-                  )}
-              </div>
-            </div>
-
-            <Separator className="my-4" />
-
-            <div className="space-y-4">
-              <div>
-                <h3 className="text-sm font-medium mb-2">Atualizar Status</h3>
-                <Select value={newStatus} onValueChange={setNewStatus}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione um status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Agendado">Agendado</SelectItem>
-                    <SelectItem value="Em processamento">Em processamento</SelectItem>
-                    <SelectItem value="Concluído">Concluído</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <h3 className="text-sm font-medium mb-2">Feedback / Observações</h3>
-                <Textarea
-                  placeholder="Adicione um feedback ou observações sobre este descarte"
-                  value={feedback}
-                  onChange={(e) => setFeedback(e.target.value)}
-                  rows={3}
-                />
-              </div>
-
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={onClose}>
-                  Cancelar
-                </Button>
-                <Button onClick={handleStatusChange}>Salvar Alterações</Button>
-              </div>
-            </div>
-          </>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Detalhes do Descarte</DialogTitle>
+        </DialogHeader>
+        {loading || !disposal ? (
+          <div>Carregando...</div>
         ) : (
-          <div className="py-8 text-center">Nenhum detalhe encontrado para este descarte.</div>
+          <div className="space-y-4">
+            <div>
+              <strong>Nome:</strong> {disposal.name}
+            </div>
+            <div>
+              <strong>Descrição:</strong> {disposal.descricao}
+            </div>
+            <div>
+              <strong>Data:</strong> {disposal.data ? new Date(disposal.data.split('T')[0]).toLocaleDateString() : "-"}
+            </div>
+            <div>
+              <strong>Código de Referência:</strong> {disposal.codigoDeReferencias}
+            </div>
+            <div>
+              <strong>ID Usuário:</strong> {disposal.usuarioId}
+            </div>
+            <div className="mt-4">
+              <strong>Eletrônicos deste descarte:</strong>
+              {electronics.map((cat) => (
+                <div key={cat.label} className="mt-2">
+                  <span className="font-semibold">{cat.label}:</span> {cat.items.length > 0 ? cat.items.map((e: any) => e.nome || e.name || e.id).join(", ") : "Nenhum"}
+                </div>
+              ))}
+            </div>
+            {hasAnyElectronics && (
+              <div className="mt-4 flex justify-end">
+                <button
+                  className="px-3 py-1 rounded bg-blue-600 text-white hover:bg-blue-700"
+                  onClick={() => setIsElectronicsModalOpen(true)}
+                >
+                  Ver Eletrônicos
+                </button>
+              </div>
+            )}
+          </div>
         )}
       </DialogContent>
+      {/* Modal de Eletrônicos */}
+      <Dialog open={isElectronicsModalOpen} onOpenChange={setIsElectronicsModalOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Eletrônicos do Descarte</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+            {electronics.filter(cat => cat.items.length > 0).length === 0 ? (
+              <div>Nenhum eletrônico associado a este descarte.</div>
+            ) : (
+              electronics.filter(cat => cat.items.length > 0).map(cat => (
+                <div key={cat.label}>
+                  <div className="font-semibold mb-1">{cat.label}:</div>
+                  <ul className="list-disc ml-6">
+                    {cat.items.map((e: any) => (
+                      <li
+                        key={e.id}
+                        className="mb-1 flex items-center gap-3 cursor-pointer hover:bg-gray-100 rounded p-1"
+                        onClick={() => {
+                          setSelectedElectronic({ id: e.id, type: cat.key });
+                          setIsElectronicDetailModalOpen(true);
+                        }}
+                      >
+                        <ElectronicWithImage catKey={cat.key} electronic={e} />
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+      {selectedElectronic && (
+        <ElectronicDetailModal
+          isOpen={isElectronicDetailModalOpen}
+          onClose={() => setIsElectronicDetailModalOpen(false)}
+          electronicId={selectedElectronic.id}
+          electronicType={selectedElectronic.type}
+        />
+      )}
     </Dialog>
-  )
+  );
 }
 

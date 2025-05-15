@@ -2,23 +2,18 @@
 const nextConfig = {
   images: {
     remotePatterns: [
-      // Configuration for example.com
+      // Permitir imagens do backend local e do servidor de produção
       {
-        protocol: "https",
-        hostname: "example.com",
-        pathname: "/**",
+        protocol: "http",
+        hostname: "localhost",
+        port: "3456",
+        pathname: "/uploads/**",
       },
-      // Configuration for Google Drive URLs (uc?export=view)
       {
-        protocol: "https",
-        hostname: "drive.google.com",
-        pathname: "/uc**", // Covers any path that starts with /uc
-      },
-      // Configuration for API
-      {
-        protocol: process.env.NODE_ENV === "development" ? "http" : "https",
-        hostname: process.env.NODE_ENV === "development" ? "localhost" : "**",
-        port: process.env.NODE_ENV === "development" ? "3456" : "",
+        protocol: "http",
+        hostname: "26.99.103.209",
+        port: "3456",
+        pathname: "/uploads/**",
       },
     ],
   },

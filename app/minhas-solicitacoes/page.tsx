@@ -33,101 +33,46 @@ export default function MyRequestsPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [selectedItem, setSelectedItem] = useState<Solicitation | null>(null)
   const [isDetailsOpen, setIsDetailsOpen] = useState(false)
-  const [userData, setUserData] = useState<UserData | null>(null)
-  const [userType, setUserType] = useState<"pessoaFisicas" | "pessoaJuridicas" | null>(null)
 
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://26.99.103.209:3456"
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3456"
 
   useEffect(() => {
-    const checkAuth = async () => {
+    const fetchSolicitations = async () => {
+      const userId = typeof window !== 'undefined' ? localStorage.getItem('userId') : null;
+      const userType = typeof window !== 'undefined' ? localStorage.getItem('userTipo') : null;
+      if (!userId || !userType) {
+        router.push("/login");
+        return;
+      }
       try {
-        const email = localStorage.getItem("userEmail")
-        const storedUserType = localStorage.getItem("userType")
-
-        if (!email || !storedUserType) {
-          router.push("/login")
-          return
-        }
-
-        let endpoint = ""
-        if (storedUserType === "PHYSICAL") {
-          endpoint = `/pessoaFisicas/email/${email}`
-          setUserType("pessoaFisicas")
-        } else if (storedUserType === "LEGAL") {
-          endpoint = `/pessoaJuridicas/email/${email}`
-          setUserType("pessoaJuridicas")
-        } else {
-          throw new Error("Invalid user type")
-        }
-
-        const response = await fetch(`${API_URL}${endpoint}`)
-
-        if (response.status === 404) {
-          throw new Error("User not found")
-        }
-
-        if (!response.ok) {
-          throw new Error("Failed to fetch user data")
-        }
-
-        const data = await response.json()
-        setUserData(data)
-        fetchSolicitations(data.id, storedUserType === "PHYSICAL" ? "fisico" : "juridico")
+        const response = await fetch(`${API_URL}/solicitacoes/${userId}/${userType}`)
+        if (!response.ok) throw new Error("Erro ao buscar solicitações");
+        let data = await response.json();
+        data = data.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        setSolicitations(data);
       } catch (error) {
-        console.error("Authentication error:", error)
-        if (error instanceof Error && error.message === "User not found") {
-          toast({
-            variant: "destructive",
-            title: "Usuário não encontrado",
-            description: "Por favor, faça login novamente.",
-          })
-        } else {
-          toast({
-            variant: "destructive",
-            title: "Erro de autenticação",
-            description: "Ocorreu um erro ao carregar seus dados. Por favor, tente novamente.",
-          })
-        }
-        localStorage.removeItem("userEmail")
-        localStorage.removeItem("userType")
-        router.push("/login")
+        setSolicitations([]);
+        toast({
+          variant: "destructive",
+          title: "Erro ao carregar solicitações",
+          description: "Não foi possível carregar suas solicitações. Por favor, tente novamente.",
+        });
       } finally {
-        setIsLoading(false)
+        setIsLoading(false);
       }
-    }
-
-    checkAuth()
-  }, [router, toast])
-
-  const fetchSolicitations = async (userId: number, userType: string) => {
-    try {
-      const response = await fetch(`${API_URL}/solicitacoes/${userId}/${userType}`)
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch solicitations")
-      }
-
-      const data = await response.json()
-      setSolicitations(data)
-    } catch (error) {
-      console.error("Error fetching solicitations:", error)
-      toast({
-        variant: "destructive",
-        title: "Erro ao carregar solicitações",
-        description: "Não foi possível carregar suas solicitações. Por favor, tente novamente.",
-      })
-    }
-  }
+    };
+    fetchSolicitations();
+  }, [router, API_URL, toast]);
 
   const getStatusBadge = (status: string) => {
-    const variants: Record<string, { variant: "default" | "success" | "destructive"; label: string }> = {
+    const variants: Record<string, { variant: "default" | "secondary" | "destructive"; label: string }> = {
       pendente: { variant: "default", label: "Pendente" },
-      aprovado: { variant: "success", label: "Aprovado" },
+      aprovado: { variant: "secondary", label: "Aprovado" },
       rejeitado: { variant: "destructive", label: "Rejeitado" },
       default: { variant: "default", label: "Pendente" },
     }
 
-    const statusInfo = variants[status.toLowerCase()] || variants.default
+    const statusInfo = variants[status?.toLowerCase()] || variants.default
     return <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
   }
 

@@ -203,20 +203,28 @@ export default function StudentRegisterPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-indigo-950 via-slate-900 to-slate-950">
-      <div className="container mx-auto px-4 py-8">
-        <Link href="/" className="inline-flex items-center text-slate-300 hover:text-slate-100 mb-8 transition-colors">
+    <main className="min-h-screen bg-[#141922] relative">
+      {/* Simple gradient background */}
+      <div
+        className="absolute inset-0 z-0"
+        style={{
+          background: "radial-gradient(circle at 50% 70%, rgba(132, 225, 0, 0.15), rgba(0, 0, 0, 0) 60%)",
+        }}
+      />
+
+      <div className="container mx-auto px-4 py-8 relative z-10">
+        <Link href="/" className="inline-flex items-center text-white hover:text-[#84e100] mb-8 transition-colors">
           <ArrowLeft className="mr-2 h-4 w-4" />
           Voltar para página inicial
         </Link>
 
         <div className="max-w-2xl mx-auto">
-          <Card className="bg-gradient-to-br from-slate-900/90 to-slate-950/90 backdrop-blur-xl border-slate-800/50">
+          <Card className="bg-[#1a212b]/90 backdrop-blur-sm border-gray-800">
             <CardHeader className="text-center">
-              <CardTitle className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-purple-400">
+              <CardTitle className="text-3xl font-bold text-[#84e100]">
                 Registro de Aluno - RECOM
               </CardTitle>
-              <CardDescription className="text-slate-400">
+              <CardDescription className="text-gray-400">
                 Período de inscrição do RECOM aberto. Preencha o formulário abaixo para se registrar.
               </CardDescription>
             </CardHeader>
@@ -224,7 +232,7 @@ export default function StudentRegisterPage() {
               <form onSubmit={handleSubmit} className="space-y-6">
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="name" className="text-slate-200">
+                    <Label htmlFor="name" className="text-white">
                       Nome Completo
                     </Label>
                     <Input
@@ -232,11 +240,11 @@ export default function StudentRegisterPage() {
                       name="name"
                       placeholder="Digite seu nome completo"
                       required
-                      className="bg-slate-800/50 border-slate-700 text-slate-200 placeholder:text-slate-400"
+                      className="bg-[#141922]/80 border-gray-700 text-white placeholder:text-gray-500 focus:border-[#84e100] focus:ring-[#84e100]/20"
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="email" className="text-slate-200">
+                    <Label htmlFor="email" className="text-white">
                       E-mail
                     </Label>
                     <Input
@@ -245,44 +253,45 @@ export default function StudentRegisterPage() {
                       type="email"
                       placeholder="Digite seu e-mail"
                       required
-                      className="bg-slate-800/50 border-slate-700 text-slate-200 placeholder:text-slate-400"
+                      className="bg-[#141922]/80 border-gray-700 text-white placeholder:text-gray-500 focus:border-[#84e100] focus:ring-[#84e100]/20"
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="bolsista" className="text-slate-200 flex items-center space-x-2">
+                    <Label htmlFor="bolsista" className="text-white flex items-center space-x-2">
                       <Checkbox
                         id="bolsista"
                         checked={isBolsista}
                         onCheckedChange={(checked) => setIsBolsista(checked as boolean)}
+                        className="border-gray-700 data-[state=checked]:bg-[#84e100] data-[state=checked]:border-[#84e100]"
                       />
                       <span>Bolsista</span>
                     </Label>
                   </div>
                   {!isBolsista && (
                     <div className="space-y-2">
-                      <Label htmlFor="dias" className="text-slate-200">
+                      <Label htmlFor="dias" className="text-white">
                         Dias da semana em prioridade ( você pode ser realocado para outro dia ):
                       </Label>
                       <div className="grid grid-cols-2 gap-4">
                         <Select value={day1} onValueChange={setDay1}>
-                          <SelectTrigger className="bg-slate-800/50 border-slate-700 text-slate-200">
+                          <SelectTrigger className="bg-[#141922]/80 border-gray-700 text-white">
                             <SelectValue placeholder="Selecione o primeiro dia" />
                           </SelectTrigger>
-                          <SelectContent>
+                          <SelectContent className="bg-[#1a212b] border-gray-700">
                             {daysOfWeek.map((day) => (
-                              <SelectItem key={day} value={day}>
+                              <SelectItem key={day} value={day} className="text-white hover:bg-[#84e100]/20">
                                 {day}
                               </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
                         <Select value={day2} onValueChange={setDay2}>
-                          <SelectTrigger className="bg-slate-800/50 border-slate-700 text-slate-200">
+                          <SelectTrigger className="bg-[#141922]/80 border-gray-700 text-white">
                             <SelectValue placeholder="Selecione o segundo dia" />
                           </SelectTrigger>
-                          <SelectContent>
+                          <SelectContent className="bg-[#1a212b] border-gray-700">
                             {daysOfWeek.map((day) => (
-                              <SelectItem key={day} value={day}>
+                              <SelectItem key={day} value={day} className="text-white hover:bg-[#84e100]/20">
                                 {day}
                               </SelectItem>
                             ))}
@@ -292,7 +301,7 @@ export default function StudentRegisterPage() {
                     </div>
                   )}
                   <div className="space-y-2">
-                    <Label htmlFor="matricula" className="text-slate-200">
+                    <Label htmlFor="matricula" className="text-white">
                       Matrícula
                     </Label>
                     <Input
@@ -300,20 +309,20 @@ export default function StudentRegisterPage() {
                       name="matricula"
                       placeholder="Digite sua matrícula"
                       required
-                      className="bg-slate-800/50 border-slate-700 text-slate-200 placeholder:text-slate-400"
+                      className="bg-[#141922]/80 border-gray-700 text-white placeholder:text-gray-500 focus:border-[#84e100] focus:ring-[#84e100]/20"
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="curso" className="text-slate-200">
+                    <Label htmlFor="curso" className="text-white">
                       Curso
                     </Label>
                     <Select value={curso} onValueChange={setCurso}>
-                      <SelectTrigger className="bg-slate-800/50 border-slate-700 text-slate-200">
+                      <SelectTrigger className="bg-[#141922]/80 border-gray-700 text-white">
                         <SelectValue placeholder="Selecione o seu curso" />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="bg-[#1a212b] border-gray-700">
                         {cursos.map((cursoOption) => (
-                          <SelectItem key={cursoOption} value={cursoOption}>
+                          <SelectItem key={cursoOption} value={cursoOption} className="text-white hover:bg-[#84e100]/20">
                             {cursoOption}
                           </SelectItem>
                         ))}
@@ -321,7 +330,7 @@ export default function StudentRegisterPage() {
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="periodo" className="text-slate-200">
+                    <Label htmlFor="periodo" className="text-white">
                       Período
                     </Label>
                     <Input
@@ -332,10 +341,9 @@ export default function StudentRegisterPage() {
                       max="20"
                       placeholder="Digite seu período (1-20)"
                       required
-                      className="bg-slate-800/50 border-slate-700 text-slate-200 placeholder:text-slate-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      className="bg-[#141922]/80 border-gray-700 text-white placeholder:text-gray-500 focus:border-[#84e100] focus:ring-[#84e100]/20 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       onWheel={preventScroll}
                       onKeyDown={(e) => {
-                        // Permitir apenas: números, backspace, delete, tab, escape, enter
                         const allowedKeys = [
                           "0",
                           "1",
@@ -357,9 +365,7 @@ export default function StudentRegisterPage() {
                       }}
                       onInput={(e) => {
                         const input = e.target as HTMLInputElement
-                        // Remover qualquer caractere não numérico
                         input.value = input.value.replace(/[^0-9]/g, "")
-
                         const value = Number.parseInt(input.value || "0")
                         if (value > 20) input.value = "20"
                         if (value < 1 && input.value !== "") input.value = "1"
@@ -395,7 +401,7 @@ export default function StudentRegisterPage() {
 
                 <Button
                   type="submit"
-                  className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white"
+                  className="w-full bg-[#84e100] hover:bg-[#9aff00] text-[#141922] font-medium"
                   disabled={isLoading}
                 >
                   {isLoading ? (

@@ -40,6 +40,7 @@ import {
   Battery,
 } from "lucide-react"
 import { DetailsDialog } from "@/components/ui/details-dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 
 interface UserData {
   id: number
@@ -51,6 +52,8 @@ interface UserData {
   endereco?: string
   comprovanteDeBaixaRenda?: string
   comprovanteDeProjeto?: string
+  pessoaFisica?: { id: number }
+  pessoaJuridica?: { id: number }
 }
 
 interface Donation {
@@ -117,43 +120,92 @@ export default function DashboardPage() {
   const [donations, setDonations] = useState<Donation[]>([])
   const [selectedItem, setSelectedItem] = useState<(Donation | Solicitation) | null>(null)
   const [isDetailsOpen, setIsDetailsOpen] = useState(false)
+  const [blockedDates, setBlockedDates] = useState<string[]>([])
+  const [firstName, setFirstName] = useState('')
+  const [firstInitial, setFirstInitial] = useState('U')
+  const [descricao, setDescricao] = useState("");
+  const [informacoesAdicionais, setInformacoesAdicionais] = useState("");
+  const [contato, setContato] = useState("");
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false)
+  const [activeTab, setActiveTab] = useState<'GIVE' | 'REQUEST'>('GIVE')
+  const [solicitationsList, setSolicitationsList] = useState<Solicitation[]>([])
+  const [isSolicitationBlockOpen, setIsSolicitationBlockOpen] = useState(false)
+  const [solicitationBlockMsg, setSolicitationBlockMsg] = useState("")
+  const [isSolicitationSuccessOpen, setIsSolicitationSuccessOpen] = useState(false)
 
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3456"
+  const API_URL = "http://26.99.103.209:3456"
 
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const email = localStorage.getItem("userEmail")
         const storedUserType = localStorage.getItem("userType")
-
-        if (!email || !storedUserType) {
+        if (!storedUserType) {
           router.push("/login")
           return
         }
 
-        let endpoint = ""
         if (storedUserType === "PHYSICAL") {
-          endpoint = `/pessoaFisicas/email/${email}`
+          const cpf = localStorage.getItem("userCpf") || ""
+          const password = localStorage.getItem("userPassword") || ""
+          if (!cpf || !password) {
+            router.push("/login")
+            return
+          }
           setUserType("pessoaFisicas")
+          localStorage.setItem("userTipo", "fisico")
+          const response = await fetch(`${API_URL}/pessoasFisicas/verify`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ cpf, password }),
+          })
+          if (response.status === 404) {
+            throw new Error("User not found")
+          }
+          if (!response.ok) {
+            throw new Error("Failed to fetch user data")
+          }
+          const data = await response.json()
+          setUserData(data.pessoaFisica)
+          console.log('[DEBUG] setUserData:', data.pessoaFisica)
         } else if (storedUserType === "LEGAL") {
-          endpoint = `/pessoaJuridicas/email/${email}`
+          const userId = localStorage.getItem("userId") || ""
+          if (!userId) {
+            router.push("/login")
+            return
+          }
           setUserType("pessoaJuridicas")
+          localStorage.setItem("userTipo", "juridico")
+          const response = await fetch(`${API_URL}/pessoasJuridicas/${userId}`)
+          if (response.status === 404) {
+            throw new Error("User not found")
+          }
+          if (!response.ok) {
+            throw new Error("Failed to fetch user data")
+          }
+          const data = await response.json()
+          setUserData(data.pessoaJuridica || data)
+          console.log('[DEBUG] setUserData:', data.pessoaJuridica || data)
+        } else if (storedUserType === "ADMIN") {
+          const userId = localStorage.getItem("userId") || ""
+          if (!userId) {
+            router.push("/login")
+            return
+          }
+          setUserType("pessoaJuridicas") // Using pessoaJuridicas for admin as well
+          localStorage.setItem("userTipo", "admin")
+          const response = await fetch(`${API_URL}/coordenadores/${userId}`)
+          if (response.status === 404) {
+            throw new Error("User not found")
+          }
+          if (!response.ok) {
+            throw new Error("Failed to fetch user data")
+          }
+          const data = await response.json()
+          setUserData(data)
+          console.log('[DEBUG] setUserData:', data)
         } else {
           throw new Error("Invalid user type")
         }
-
-        const response = await fetch(`${API_URL}${endpoint}`)
-
-        if (response.status === 404) {
-          throw new Error("User not found")
-        }
-
-        if (!response.ok) {
-          throw new Error("Failed to fetch user data")
-        }
-
-        const data = await response.json()
-        setUserData(data)
       } catch (error) {
         console.error("Authentication error:", error)
         if (error instanceof Error && error.message === "User not found") {
@@ -169,16 +221,39 @@ export default function DashboardPage() {
             description: "Ocorreu um erro ao carregar seus dados. Por favor, tente novamente.",
           })
         }
-        localStorage.removeItem("userEmail")
+        localStorage.removeItem("userCpf")
+        localStorage.removeItem("userCnpj")
         localStorage.removeItem("userType")
         router.push("/login")
       } finally {
         setIsLoading(false)
       }
     }
-
     checkAuth()
   }, [router, toast])
+
+  useEffect(() => {
+    // Buscar datas bloqueadas do backend
+    fetch(`${API_URL}/datas`)
+      .then(res => res.json())
+      .then((datas: any[]) => {
+        // Pega apenas datas com disponibilidade === false e converte para 'YYYY-MM-DD'
+        const bloqueadas = datas
+          .filter(d => d.disponibilidade === false)
+          .map(d => new Date(d.data).toISOString().slice(0, 10))
+        setBlockedDates(bloqueadas)
+      })
+      .catch(() => setBlockedDates([]))
+  }, [API_URL])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const storedName = localStorage.getItem('userName') || ''
+      const first = storedName.split(' ')[0] || ''
+      setFirstName(first)
+      setFirstInitial(first.charAt(0).toUpperCase() || 'U')
+    }
+  }, [])
 
   const fetchSolicitations = async () => {
     if (!userData?.id || !userType) return
@@ -205,18 +280,18 @@ export default function DashboardPage() {
   }
 
   const fetchDonations = async () => {
-    if (!userData?.id || !userType) return
+    const userId = typeof window !== 'undefined' ? localStorage.getItem('userId') : null;
+    const userType = typeof window !== 'undefined' ? localStorage.getItem('userTipo') : null;
+    if (!userId || !userType) return;
 
     try {
-      const type = userType === "pessoaFisicas" ? "fisico" : "juridico"
-      // Updated to use URL parameters instead of query parameters
-      const response = await fetch(`${API_URL}/doacoesUsuarios/${userData.id}/${type}`)
-
+      const response = await fetch(`${API_URL}/doacoesUsuarios/${userId}/${userType}`)
       if (!response.ok) {
         throw new Error("Failed to fetch donations")
       }
-
-      const data = await response.json()
+      let data = await response.json()
+      // Ordenar por data decrescente
+      data = data.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       setDonations(data)
     } catch (error) {
       console.error("Error fetching donations:", error)
@@ -228,6 +303,28 @@ export default function DashboardPage() {
     }
   }
 
+  const fetchSolicitationsList = async () => {
+    const userId = typeof window !== 'undefined' ? localStorage.getItem('userId') : null;
+    const userType = typeof window !== 'undefined' ? localStorage.getItem('userTipo') : null;
+    if (!userId || !userType) return;
+    try {
+      const response = await fetch(`${API_URL}/solicitacoes/${userId}/${userType}`)
+      if (!response.ok) {
+        throw new Error("Failed to fetch solicitations")
+      }
+      let data = await response.json()
+      data = data.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      setSolicitationsList(data)
+    } catch (error) {
+      console.error("Error fetching solicitations:", error)
+      toast({
+        variant: "destructive",
+        title: "Erro ao carregar solicitações",
+        description: "Não foi possível carregar suas solicitações. Por favor, tente novamente.",
+      })
+    }
+  }
+
   useEffect(() => {
     if (userData?.id) {
       fetchSolicitations()
@@ -235,49 +332,82 @@ export default function DashboardPage() {
     }
   }, [userData])
 
+  useEffect(() => {
+    if (activeTab === 'GIVE') {
+      fetchDonations()
+    } else {
+      fetchSolicitationsList()
+    }
+  }, [activeTab])
+
+  // Gerar nome aleatório DOA-XX para exibir no <pre> e enviar no payload
+  const randomName = (() => {
+    if (typeof window !== "undefined") {
+      // Gera e mantém o mesmo valor enquanto o usuário não recarregar a página
+      if (!(window as any)._doaRandomName) {
+        const n = Math.floor(Math.random() * 90 + 10);
+        (window as any)._doaRandomName = `DOA-${n}`;
+      }
+      return (window as any)._doaRandomName;
+    }
+    return "DOA-00";
+  })();
+
+  // Gerar nome aleatório SOL-XX para exibir no <pre> e enviar no payload
+  const randomSolicitationName = (() => {
+    if (typeof window !== "undefined") {
+      // Gera e mantém o mesmo valor enquanto o usuário não recarregar a página
+      if (!(window as any)._solRandomName) {
+        const n = Math.floor(Math.random() * 90 + 10);
+        (window as any)._solRandomName = `SOL-${n}`;
+      }
+      return (window as any)._solRandomName;
+    }
+    return "SOL-00";
+  })();
+
   const handleDonationSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-
-    if (!userData?.id || !userType) {
+    alert('handleDonationSubmit chamado!');
+    console.log('handleDonationSubmit chamado!');
+    console.log('userData:', userData);
+    console.log('userType:', userType);
+    const userId = userData?.id;
+    if (!userId || !userType) {
       toast({
         variant: "destructive",
         title: "Erro ao criar doação",
         description: "Usuário não autenticado. Por favor, faça login novamente.",
       })
-      return
+      return;
     }
 
     try {
-      const formData = new FormData(e.target as HTMLFormElement)
-      const descricao = formData.get("descricao") as string
-      const informacoesAdicionais = (formData.get("informacoesAdicionais") as string) || ""
-      const contato = formData.get("contato") as string
+      // Usar o mesmo nome aleatório do <pre>
+      const name = randomName;
 
-      // Prepare the payload according to the required format
-      const payload = {
-        name: userData.name,
-        eletronicos: selectedCategories.join(", "),
+      // Montar payload conforme contrato, usando os estados
+      const payload: any = {
+        name,
+        eletronicos: selectedCategories
+          .map((id) => {
+            const found = ELECTRONIC_CATEGORIES.find((cat) => cat.id === id)
+            return found ? found.label : id
+          })
+          .join(", "),
         descricao,
         informacoesAdicionais,
         horarioDeEntrega: time,
         contato,
         data: date?.toISOString() || new Date().toISOString(),
         status: "pendente",
-        // Only include the appropriate user type connection
-        ...(userType === "pessoaFisicas"
-          ? {
-              donatariofisico: {
-                connect: { id: userData.id },
-              },
-            }
-          : {
-              donatariojuridico: {
-                connect: { id: userData.id },
-              },
-            }),
+        donatariofisico: userType === "pessoaFisicas" ? userId : null,
+        donatariojuridico: userType === "pessoaJuridicas" ? userId : null,
+        usuario: null,
       }
 
-      console.log("Sending payload:", payload) // Debug log
+      console.log('Payload enviado para /doacoesUsuarios:', payload)
+      console.log('Enviando POST para:', `${API_URL}/doacoesUsuarios`);
 
       const response = await fetch(`${API_URL}/doacoesUsuarios`, {
         method: "POST",
@@ -287,11 +417,12 @@ export default function DashboardPage() {
         body: JSON.stringify(payload),
       })
 
+      console.log('Resposta recebida do POST:', response);
+
       if (!response.ok) {
         const errorText = await response.text()
         let errorMessage = "Falha ao criar doação"
         try {
-          // Only try to parse as JSON if it looks like JSON
           if (errorText.trim().startsWith("{")) {
             const errorData = JSON.parse(errorText)
             errorMessage = errorData.message || errorMessage
@@ -311,13 +442,22 @@ export default function DashboardPage() {
         description: `Sua doação foi registrada com o ID #${data.id}`,
       })
 
+      setIsConfirmOpen(true)
+
       // Reset form and refresh donations list
       setSelectedCategories([])
       setDate(new Date())
       setTime("")
+      setDescricao("")
+      setInformacoesAdicionais("")
+      setContato("")
+      if (typeof window !== "undefined") {
+        const n = Math.floor(Math.random() * 90 + 10);
+        (window as any)._doaRandomName = `DOA-${n}`;
+      }
       fetchDonations()
     } catch (error) {
-      console.error("Error creating donation:", error)
+      console.error("Erro ao criar doação (detalhado):", error)
       toast({
         variant: "destructive",
         title: "Erro ao agendar doação",
@@ -330,48 +470,55 @@ export default function DashboardPage() {
   }
 
   const handleSolicitationSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+    e.preventDefault();
 
-    if (!userData?.id || !userType) {
+    const userId = userData?.id;
+    if (!userId || !userType) {
       toast({
         variant: "destructive",
         title: "Erro ao criar solicitação",
         description: "Usuário não autenticado. Por favor, faça login novamente.",
-      })
-      return
+      });
+      return;
     }
 
+    // Verificação do comprovante
+    if (
+      userType === "pessoaFisicas" &&
+      (!userData.comprovanteDeBaixaRenda || userData.comprovanteDeBaixaRenda === "")
+    ) {
+      setSolicitationBlockMsg("Coloque seu comprovante de baixa renda para poder solicitar a doação!\nVocê pode adicionar em Configurações (clique na bolinha com sua inicial no canto superior direito).");
+      setIsSolicitationBlockOpen(true);
+      return;
+    }
+    if (
+      userType === "pessoaJuridicas" &&
+      (!userData.comprovanteDeProjeto || userData.comprovanteDeProjeto === "")
+    ) {
+      setSolicitationBlockMsg("Preencha o comprovante do projeto para poder solicitar a doação!\nVocê pode adicionar em Configurações (clique na bolinha com sua inicial no canto superior direito).");
+      setIsSolicitationBlockOpen(true);
+      return;
+    }
+
+    // Montar payload conforme contrato
     try {
-      const formData = new FormData(e.target as HTMLFormElement)
-      const descricao = formData.get("descricao") as string
-      const informacoes = (formData.get("informacoes") as string) || ""
-      const contato = formData.get("contato") as string
-
-      // Prepare the payload according to the required format
+      const name = randomSolicitationName;
       const payload = {
-        name: userData.name,
-        eletronicos: selectedCategories.join(", "),
+        name,
+        eletronicos: selectedCategories
+          .map((id) => {
+            const found = ELECTRONIC_CATEGORIES.find((cat) => cat.id === id);
+            return found ? found.label : id;
+          })
+          .join(", "),
         descricao,
-        informacoes,
-        horarioparapegar: time,
+        informacoes: informacoesAdicionais,
         contato,
-        data: date?.toISOString() || new Date().toISOString(),
         status: "pendente",
-        // Only include the appropriate user type connection
-        ...(userType === "pessoaFisicas"
-          ? {
-              usuariosolicitacaofisico: {
-                connect: { id: userData.id },
-              },
-            }
-          : {
-              donatariojuridico: {
-                connect: { id: userData.id },
-              },
-            }),
-      }
-
-      console.log("Sending solicitation payload:", payload) // Debug log
+        usuario: null,
+        usuariosolicitacaofisico: userType === "pessoaFisicas" ? userId : null,
+        donatariojuridico: userType === "pessoaJuridicas" ? userId : null,
+      };
 
       const response = await fetch(`${API_URL}/solicitacoes`, {
         method: "POST",
@@ -379,38 +526,36 @@ export default function DashboardPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(payload),
-      })
+      });
 
       if (!response.ok) {
-        const errorText = await response.text()
-        let errorMessage = "Falha ao criar solicitação"
+        const errorText = await response.text();
+        let errorMessage = "Falha ao criar solicitação";
         try {
           if (errorText.trim().startsWith("{")) {
-            const errorData = JSON.parse(errorText)
-            errorMessage = errorData.message || errorMessage
-          } else {
-            console.error("Server response:", errorText)
+            const errorData = JSON.parse(errorText);
+            errorMessage = errorData.message || errorMessage;
           }
-        } catch (e) {
-          console.error("Error parsing response:", e)
-        }
-        throw new Error(errorMessage)
+        } catch (e) {}
+        toast({
+          variant: "destructive",
+          title: "Erro ao criar solicitação",
+          description: errorMessage,
+        });
+        throw new Error(errorMessage);
       }
 
-      const data = await response.json()
-
+      const data = await response.json();
       toast({
         title: "Solicitação criada com sucesso!",
         description: `Sua solicitação foi registrada com o ID #${data.id}`,
-      })
-
-      // Reset form and refresh solicitations list
-      setSelectedCategories([])
-      setDate(new Date())
-      setTime("")
-      fetchSolicitations()
+      });
+      setIsSolicitationSuccessOpen(true);
+      setSelectedCategories([]);
+      setDate(new Date());
+      setTime("");
+      fetchSolicitations();
     } catch (error) {
-      console.error("Error creating solicitation:", error)
       toast({
         variant: "destructive",
         title: "Erro ao criar solicitação",
@@ -418,12 +563,13 @@ export default function DashboardPage() {
           error instanceof Error
             ? error.message
             : "Ocorreu um erro ao processar sua solicitação. Por favor, tente novamente.",
-      })
+      });
     }
   }
 
   const handleLogout = () => {
-    localStorage.removeItem("userEmail")
+    localStorage.removeItem("userCpf")
+    localStorage.removeItem("userCnpj")
     localStorage.removeItem("userType")
     router.push("/login")
   }
@@ -436,6 +582,12 @@ export default function DashboardPage() {
   const isDateDisabled = (date: Date) => {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
+
+    // Bloquear datas vindas do backend
+    const dateISO = date.toISOString().slice(0, 10)
+    if (blockedDates.includes(dateISO)) {
+      return true
+    }
 
     // For donations, prevent same day and check weekends
     if (donationType === "GIVE") {
@@ -458,9 +610,9 @@ export default function DashboardPage() {
   }
 
   const getStatusBadge = (status: Donation["status"] | Solicitation["status"]) => {
-    const variants: Record<string, { variant: "default" | "success" | "destructive"; label: string }> = {
+    const variants: Record<string, { variant: "default" | "secondary" | "destructive"; label: string }> = {
       pendente: { variant: "default", label: "Pendente" },
-      aprovado: { variant: "success", label: "Aprovado" },
+      aprovado: { variant: "secondary", label: "Aprovado" },
       rejeitado: { variant: "destructive", label: "Rejeitado" },
       // Add fallback for unexpected status values
       default: { variant: "default", label: "Pendente" },
@@ -487,14 +639,14 @@ export default function DashboardPage() {
 
         <div className="flex items-center gap-4">
           <div className="text-sm text-right">
-            <p className="font-medium">{userData?.name}</p>
+            <p className="font-medium">{firstName}</p>
             <p className="text-muted-foreground">{userData?.email}</p>
           </div>
           <DropdownMenu>
             <DropdownMenuTrigger>
               <Avatar>
                 <AvatarImage src="/placeholder.svg" alt="Avatar" />
-                <AvatarFallback>{userData?.name?.charAt(0) || "U"}</AvatarFallback>
+                <AvatarFallback>{firstInitial}</AvatarFallback>
               </Avatar>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
@@ -523,11 +675,13 @@ export default function DashboardPage() {
           <CardContent>
             <Tabs
               defaultValue="GIVE"
+              value={activeTab}
               onValueChange={(value) => {
+                setActiveTab(value as 'GIVE' | 'REQUEST')
                 setDonationType(value as "GIVE" | "REQUEST")
-                setSelectedCategories([]) // Reset categories when switching tabs
-                setTime("") // Reset time
-                setDate(new Date()) // Reset date
+                setSelectedCategories([])
+                setTime("")
+                setDate(new Date())
               }}
             >
               <TabsList className="grid w-full grid-cols-2">
@@ -574,6 +728,8 @@ export default function DashboardPage() {
                           className="min-h-[120px]"
                           required
                           name="descricao"
+                          value={descricao}
+                          onChange={e => setDescricao(e.target.value)}
                         />
                       </div>
                       <div className="space-y-2">
@@ -582,6 +738,8 @@ export default function DashboardPage() {
                           placeholder="Outras informações relevantes..."
                           className="min-h-[120px]"
                           name="informacoesAdicionais"
+                          value={informacoesAdicionais}
+                          onChange={e => setInformacoesAdicionais(e.target.value)}
                         />
                       </div>
                     </div>
@@ -640,18 +798,13 @@ export default function DashboardPage() {
 
                       <div className="space-y-2">
                         <Label>Contato</Label>
-                        <Input type="tel" placeholder="(00) 00000-0000" name="contato" required />
+                        <Input type="tel" placeholder="(00) 00000-0000" name="contato" required value={contato} onChange={e => setContato(e.target.value)} />
                       </div>
 
                       <Button
                         type="submit"
                         className="w-full"
                         disabled={!date || !time || selectedCategories.length === 0}
-                        onClick={() => {
-                          console.log("Date:", date)
-                          console.log("Time:", time)
-                          console.log("Categories:", selectedCategories)
-                        }}
                       >
                         {donationType === "GIVE" ? "Agendar Doação" : "Enviar Solicitação"}
                       </Button>
@@ -699,6 +852,8 @@ export default function DashboardPage() {
                           className="min-h-[120px]"
                           required
                           name="descricao"
+                          value={descricao}
+                          onChange={e => setDescricao(e.target.value)}
                         />
                       </div>
                       <div className="space-y-2">
@@ -706,7 +861,9 @@ export default function DashboardPage() {
                         <Textarea
                           placeholder="Outras informações relevantes..."
                           className="min-h-[120px]"
-                          name="informacoes"
+                          name="informacoesAdicionais"
+                          value={informacoesAdicionais}
+                          onChange={e => setInformacoesAdicionais(e.target.value)}
                         />
                       </div>
                     </div>
@@ -714,73 +871,24 @@ export default function DashboardPage() {
 
                   <div className="grid gap-4 md:grid-cols-2">
                     <div className="space-y-2">
-                      <Label>Data para Retirada</Label>
-                      <Card>
-                        <CardContent className="p-0">
-                          <Calendar
-                            mode="single"
-                            selected={date}
-                            onSelect={(newDate) => {
-                              setDate(newDate || undefined)
-                              setTime("")
-                            }}
-                            disabled={isDateDisabled}
-                            className="rounded-md"
-                          />
-                        </CardContent>
-                      </Card>
+                      <Label>Contato</Label>
+                      <Input
+                        type="tel"
+                        placeholder="(00) 00000-0000"
+                        name="contato"
+                        required
+                        value={contato}
+                        onChange={e => setContato(e.target.value)}
+                      />
                     </div>
 
-                    <div className="space-y-4">
-                      <div className="space-y-2">
-                        <Label>Horário para Retirada</Label>
-                        <Select
-                          onValueChange={(value) => {
-                            console.log("Setting time:", value)
-                            setTime(value)
-                          }}
-                          value={time}
-                          disabled={!date || isDateDisabled(date)}
-                        >
-                          <SelectTrigger>
-                            <SelectValue
-                              placeholder={
-                                !date
-                                  ? "Selecione uma data primeiro"
-                                  : isDateDisabled(date)
-                                    ? "Data não disponível"
-                                    : "Selecione um horário"
-                              }
-                            />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {getAvailableHours(date).map((hour) => (
-                              <SelectItem key={hour} value={hour}>
-                                {hour}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Contato</Label>
-                        <Input type="tel" placeholder="(00) 00000-0000" name="contato" required />
-                      </div>
-
-                      <Button
-                        type="submit"
-                        className="w-full"
-                        disabled={!date || !time || selectedCategories.length === 0}
-                        onClick={() => {
-                          console.log("Date:", date)
-                          console.log("Time:", time)
-                          console.log("Categories:", selectedCategories)
-                        }}
-                      >
-                        {donationType === "GIVE" ? "Agendar Doação" : "Enviar Solicitação"}
-                      </Button>
-                    </div>
+                    <Button
+                      type="submit"
+                      className="w-full"
+                      disabled={selectedCategories.length === 0}
+                    >
+                      {donationType === "GIVE" ? "Agendar Doação" : "Enviar Solicitação"}
+                    </Button>
                   </div>
                 </form>
               </TabsContent>
@@ -791,62 +899,173 @@ export default function DashboardPage() {
         {/* Sidebar with Recent Donations */}
         <Card className="order-1 md:order-2">
           <CardHeader>
-            <CardTitle>Minhas Doações Recentes</CardTitle>
-            <CardDescription>Acompanhe o status das suas doações e solicitações</CardDescription>
+            <CardTitle>
+              {activeTab === 'GIVE' ? 'Minhas Doações Recentes' : 'Minhas Solicitações Recentes'}
+            </CardTitle>
+            <CardDescription>
+              {activeTab === 'GIVE'
+                ? 'Acompanhe o status das suas doações e solicitações'
+                : 'Acompanhe o status das suas solicitações de doação'}
+            </CardDescription>
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-2"
+              onClick={activeTab === 'GIVE' ? fetchDonations : fetchSolicitationsList}
+            >
+              Atualizar
+            </Button>
           </CardHeader>
           <CardContent>
-            {donations.length === 0 && solicitations.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <p>Você ainda não possui doações ou solicitações.</p>
-                <p>Comece fazendo uma doação ou solicitação!</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {[...donations, ...solicitations]
-                  .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-                  .map((item) => (
-                    <Card key={`${item.id}-${item.hasOwnProperty("horarioparapegar") ? "solicitation" : "donation"}`}>
-                      <CardContent className="p-4">
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <h3 className="font-semibold">
-                              {item.hasOwnProperty("horarioparapegar") ? "Solicitação" : "Doação"} #{item.id}
-                            </h3>
-                            {getStatusBadge(item.status)}
-                          </div>
-                          <p className="text-sm text-muted-foreground">{item.eletronicos}</p>
-                          <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                            <div className="flex items-center">
-                              <CalendarIcon className="mr-1 h-4 w-4" />
-                              {new Date(item.createdAt).toLocaleDateString()}
+            {activeTab === 'GIVE'
+              ? (donations.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <p>Você ainda não possui doações.</p>
+                    <p>Comece fazendo uma doação!</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {[...donations]
+                      .slice(0, 5)
+                      .map((item) => (
+                        <Card key={`${item.id}-donation`}>
+                          <CardContent className="p-4">
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <h3 className="font-semibold">
+                                  Doação #{item.id}
+                                </h3>
+                                {getStatusBadge(item.status)}
+                              </div>
+                              <p className="text-sm text-muted-foreground">{item.eletronicos}</p>
+                              <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                                <div className="flex items-center">
+                                  <CalendarIcon className="mr-1 h-4 w-4" />
+                                  {new Date(item.createdAt).toLocaleDateString()}
+                                </div>
+                              </div>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="w-full mt-2"
+                                onClick={() => {
+                                  setSelectedItem(item)
+                                  setIsDetailsOpen(true)
+                                }}
+                              >
+                                Ver Detalhes
+                              </Button>
                             </div>
-                          </div>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="w-full mt-2"
-                            onClick={() => {
-                              setSelectedItem(item)
-                              setIsDetailsOpen(true)
-                            }}
-                          >
-                            Ver Detalhes
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-              </div>
-            )}
+                          </CardContent>
+                        </Card>
+                      ))}
+                  </div>
+                ))
+              : (solicitationsList.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <p>Você ainda não possui solicitações.</p>
+                    <p>Comece solicitando uma doação!</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {[...solicitationsList]
+                      .slice(0, 5)
+                      .map((item) => (
+                        <Card key={`${item.id}-solicitation`}>
+                          <CardContent className="p-4">
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <h3 className="font-semibold">
+                                  Solicitação #{item.id}
+                                </h3>
+                                {getStatusBadge(item.status)}
+                              </div>
+                              <p className="text-sm text-muted-foreground">{item.eletronicos}</p>
+                              <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                                <div className="flex items-center">
+                                  <CalendarIcon className="mr-1 h-4 w-4" />
+                                  {new Date(item.createdAt).toLocaleDateString('pt-BR', {
+                                    day: '2-digit',
+                                    month: '2-digit',
+                                    year: 'numeric'
+                                  })}
+                                </div>
+                              </div>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="w-full mt-2"
+                                onClick={() => {
+                                  setSelectedItem(item)
+                                  setIsDetailsOpen(true)
+                                }}
+                              >
+                                Ver Detalhes
+                              </Button>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                  </div>
+                ))}
           </CardContent>
         </Card>
       </div>
       <DetailsDialog
-        data={selectedItem}
+        data={selectedItem ? {
+          id: selectedItem.id,
+          name: userData?.name || '',
+          eletronicos: selectedItem.eletronicos || '',
+          descricao: (selectedItem as any).descricao || '',
+          informacoesAdicionais: (selectedItem as any).informacoesAdicionais,
+          informacoes: (selectedItem as any).informacoes,
+          horarioDeEntrega: (selectedItem as any).horarioDeEntrega,
+          horarioparapegar: (selectedItem as any).horarioparapegar,
+          contato: userData?.telefone || '',
+          data: (selectedItem as any).data || selectedItem.createdAt,
+          status: selectedItem.status,
+          createdAt: selectedItem.createdAt,
+        } : null}
         isOpen={isDetailsOpen}
         onOpenChange={setIsDetailsOpen}
         type={selectedItem?.hasOwnProperty("horarioparapegar") ? "solicitacao" : "doacao"}
       />
+      <Dialog open={isConfirmOpen} onOpenChange={setIsConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Doação criada com sucesso!</DialogTitle>
+            <DialogDescription>
+              Sua doação foi registrada. Estamos no aguardo da sua ajuda!
+            </DialogDescription>
+          </DialogHeader>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={isSolicitationBlockOpen} onOpenChange={setIsSolicitationBlockOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Atenção</DialogTitle>
+            <DialogDescription>
+              {solicitationBlockMsg.split('\n').map((line, idx) => <div key={idx}>{line}</div>)}
+            </DialogDescription>
+          </DialogHeader>
+          <Button className="mt-4 w-full" onClick={() => setIsSolicitationBlockOpen(false)}>
+            Fechar
+          </Button>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={isSolicitationSuccessOpen} onOpenChange={setIsSolicitationSuccessOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Solicitação enviada!</DialogTitle>
+            <DialogDescription>
+              Sua solicitação foi requerida com sucesso, aguarde a nossa análise.
+            </DialogDescription>
+          </DialogHeader>
+          <Button className="mt-4 w-full" onClick={() => setIsSolicitationSuccessOpen(false)}>
+            Fechar
+          </Button>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

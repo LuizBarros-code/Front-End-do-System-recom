@@ -61,6 +61,7 @@ const EQUIPMENT_CATEGORIES = {
   placasMae: "Placas Mãe",
   processadores: "Processadores",
   teclados: "Teclados",
+  mouses: "Mouses",
 } as const
 
 type EquipmentCategory = keyof typeof EQUIPMENT_CATEGORIES
@@ -68,7 +69,7 @@ type EquipmentCategory = keyof typeof EQUIPMENT_CATEGORIES
 interface EquipmentSelectorProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onSelect: (selectedEquipment: Record<EquipmentCategory, number[]>) => void
+  onSelect: (selected: Record<EquipmentCategory, number[]>, all: Record<EquipmentCategory, Equipment[]>) => void
 }
 
 export function EquipmentSelector({ open, onOpenChange, onSelect }: EquipmentSelectorProps) {
@@ -83,6 +84,7 @@ export function EquipmentSelector({ open, onOpenChange, onSelect }: EquipmentSel
     placasMae: [],
     processadores: [],
     teclados: [],
+    mouses: [],
   })
   const [selected, setSelected] = useState<Record<EquipmentCategory, number[]>>({
     estabilizadores: [],
@@ -95,6 +97,7 @@ export function EquipmentSelector({ open, onOpenChange, onSelect }: EquipmentSel
     placasMae: [],
     processadores: [],
     teclados: [],
+    mouses: [],
   })
   const [loading, setLoading] = useState(false)
 
@@ -105,7 +108,45 @@ export function EquipmentSelector({ open, onOpenChange, onSelect }: EquipmentSel
         Object.keys(EQUIPMENT_CATEGORIES).map(async (cat) => {
           const res = await fetch(`${API_URL}/${cat}`)
           const data = await res.json()
-          return { cat, data }
+          // Buscar imagem para cada equipamento
+          const imgEndpointMap: Record<string, string> = {
+            estabilizadores: "estabilizado",
+            fontesDeAlimentacao: "fonteDeAlimentacao",
+            gabinetes: "gabinete",
+            hds: "hd",
+            impressoras: "impressora",
+            monitores: "monitor",
+            notebooks: "notebook",
+            placasMae: "placaMae",
+            processadores: "processador",
+            teclados: "teclado",
+            mouses: "mouse",
+          }
+          const imgType = imgEndpointMap[cat]
+          const withImages = await Promise.all(
+            data.map(async (item: any) => {
+              try {
+                const imgRes = await fetch(`http://26.99.103.209:3456/imagens/${imgType}/${item.id}`)
+                if (imgRes.ok) {
+                  const imgData = await imgRes.json()
+                  let caminho = null
+                  if (Array.isArray(imgData) && imgData.length > 0) {
+                    caminho = imgData[0].url || imgData[0].caminho
+                  } else if (imgData && imgData.caminho) {
+                    caminho = imgData.url || imgData.caminho
+                  }
+                  let imgUrl = null
+                  if (caminho) {
+                    let finalPath = caminho.startsWith('/') ? caminho : `/${caminho}`
+                    imgUrl = `http://26.99.103.209:3456${finalPath}`
+                  }
+                  return { ...item, imagem: imgUrl }
+                }
+              } catch {}
+              return { ...item, imagem: null }
+            })
+          )
+          return { cat, data: withImages }
         })
       ).then((results) => {
         const eq: Record<EquipmentCategory, Equipment[]> = {
@@ -119,6 +160,7 @@ export function EquipmentSelector({ open, onOpenChange, onSelect }: EquipmentSel
           placasMae: [],
           processadores: [],
           teclados: [],
+          mouses: [],
         }
         results.forEach(({ cat, data }) => {
           eq[cat as EquipmentCategory] = data
@@ -139,7 +181,7 @@ export function EquipmentSelector({ open, onOpenChange, onSelect }: EquipmentSel
   }
 
   const handleConfirm = () => {
-    onSelect(selected)
+    onSelect(selected, allEquipment)
     onOpenChange(false)
   }
 
@@ -159,14 +201,6 @@ export function EquipmentSelector({ open, onOpenChange, onSelect }: EquipmentSel
       default:
         return null
     }
-  }
-
-  const convertGoogleDriveUrl = (url: string) => {
-    const fileId = url.match(/\/file\/d\/([^/]+)\//)?.[1]
-    if (fileId) {
-      return `https://drive.google.com/uc?export=view&id=${fileId}`
-    }
-    return url
   }
 
   // Resumo dos selecionados
@@ -216,7 +250,7 @@ export function EquipmentSelector({ open, onOpenChange, onSelect }: EquipmentSel
                             <CardHeader className="flex flex-col items-center gap-2 p-2">
                               <div className="relative h-32 w-32 overflow-hidden rounded-lg bg-gray-100 mb-2">
                                 <Image
-                                  src={convertGoogleDriveUrl(item.imagem) || "/placeholder.svg"}
+                                  src={item.imagem || "/placeholder.svg"}
                                   alt={item.nome}
                                   width={128}
                                   height={128}

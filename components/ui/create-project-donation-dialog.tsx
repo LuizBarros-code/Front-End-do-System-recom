@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -27,6 +27,7 @@ type UserType = "fisica" | "juridica"
 type NameOption = {
   id: number
   name: string
+  type: "fisica" | "juridica"
 }
 
 interface CreateProjectDonationDialogProps {
@@ -39,6 +40,7 @@ export function CreateProjectDonationDialog({ userId }: CreateProjectDonationDia
   const [isLoading, setIsLoading] = useState(false)
   const [names, setNames] = useState<NameOption[]>([])
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null)
+  const [selectedUserType, setSelectedUserType] = useState<UserType | null>(null)
   const [open, setOpen] = useState(false)
   const [selectorOpen, setSelectorOpen] = useState(false)
   const [selectedEquipment, setSelectedEquipment] = useState<any>({})
@@ -51,18 +53,25 @@ export function CreateProjectDonationDialog({ userId }: CreateProjectDonationDia
     contato: "",
     data: "",
   })
+  const [nameDropdownOpen, setNameDropdownOpen] = useState(false)
+  const [nameSearch, setNameSearch] = useState("")
+  const nameInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     const fetchNames = async () => {
       setIsLoading(true)
       try {
-        const endpoint = userType === "fisica" ? "pessoasFisicas/names" : "pessoasJuridicas/names"
+        const endpoint = userType === "fisica" ? "pessoasFisicas" : "pessoasJuridicas"
         const response = await fetch(`${API_URL}/${endpoint}`)
         if (!response.ok) {
           throw new Error("Falha ao carregar a lista de nomes")
         }
         const data = await response.json()
-        setNames(data)
+        setNames(data.map((u: any) => ({ 
+          id: u.id, 
+          name: u.name,
+          type: userType
+        })))
       } catch (error) {
         console.error("Erro ao carregar nomes:", error)
         toast({
@@ -74,7 +83,6 @@ export function CreateProjectDonationDialog({ userId }: CreateProjectDonationDia
         setIsLoading(false)
       }
     }
-
     fetchNames()
   }, [userType, toast])
 
@@ -83,13 +91,28 @@ export function CreateProjectDonationDialog({ userId }: CreateProjectDonationDia
     setIsLoading(true)
 
     try {
-      if (!selectedUserId) {
+      if (!selectedUserId || !selectedUserType) {
         throw new Error("Por favor, selecione uma pessoa/empresa")
       }
 
       const userIdNumber = Number(userId)
       if (isNaN(userIdNumber)) {
         throw new Error("ID do usuário inválido")
+      }
+
+      // Ensure all equipment arrays are properly formatted
+      const equipmentArrays = {
+        teclados: selectedEquipment.teclados || [],
+        hds: selectedEquipment.hds || [],
+        fontesDeAlimentacao: selectedEquipment.fontesDeAlimentacao || [],
+        gabinetes: selectedEquipment.gabinetes || [],
+        monitores: selectedEquipment.monitores || [],
+        mouses: selectedEquipment.mouses || [],
+        estabilizadores: selectedEquipment.estabilizadores || [],
+        impressoras: selectedEquipment.impressoras || [],
+        placasmae: selectedEquipment.placasmae || [],
+        notebooks: selectedEquipment.notebooks || [],
+        processadores: selectedEquipment.processadores || []
       }
 
       const payload = {
@@ -100,19 +123,11 @@ export function CreateProjectDonationDialog({ userId }: CreateProjectDonationDia
         nomeOuEmpresa: formData.nomeOuEmpresa,
         contato: formData.contato,
         data: new Date(formData.data).toISOString(),
-        status: "PENDENTE",
+        status: "CONCLUIDO",
         donatarioId: userIdNumber,
-        usuariofisicoId: userType === "fisica" ? Number(selectedUserId) : null,
-        usuariojuridicoId: userType === "juridica" ? Number(selectedUserId) : null,
-        ...Object.entries(selectedEquipment).reduce(
-          (acc, [key, value]) => {
-            if (Array.isArray(value) && value.length > 0) {
-              acc[key] = value
-            }
-            return acc
-          },
-          {} as Record<string, number[]>,
-        ),
+        usuariofisicoId: selectedUserType === "fisica" ? Number(selectedUserId) : null,
+        usuariojuridicoId: selectedUserType === "juridica" ? Number(selectedUserId) : null,
+        ...equipmentArrays
       }
 
       console.log("Enviando payload:", payload)
@@ -134,24 +149,36 @@ export function CreateProjectDonationDialog({ userId }: CreateProjectDonationDia
       const result = await response.json()
       console.log("Resposta do servidor:", result)
 
-      // Update equipment with donation ID
-      await Promise.all(
-        Object.entries(selectedEquipment).map(async ([category, ids]) => {
-          if (Array.isArray(ids) && ids.length > 0) {
-            await Promise.all(
-              ids.map((id) =>
-                fetch(`${API_URL}/${category}/${id}`, {
-                  method: "PATCH",
-                  headers: {
-                    "Content-Type": "application/json",
-                  },
-                  body: JSON.stringify({ doacaoId: result.id }),
-                }),
-              ),
-            )
-          }
-        }),
-      )
+      // Atualizar status dos eletrônicos para 'DOACAO'
+      const updateStatusEndpoints = {
+        teclados: "teclados",
+        hds: "hds",
+        fontesDeAlimentacao: "fontesDeAlimentacao",
+        gabinetes: "gabinetes",
+        monitores: "monitores",
+        mouses: "mouses",
+        estabilizadores: "estabilizadores",
+        impressoras: "impressoras",
+        placasmae: "placasMae",
+        notebooks: "notebooks",
+        processadores: "processadores",
+      };
+      const allUpdates = [];
+      Object.entries(equipmentArrays).forEach(([key, arr]) => {
+        const endpoint = updateStatusEndpoints[key];
+        if (endpoint && Array.isArray(arr)) {
+          arr.forEach((id) => {
+            allUpdates.push(
+              fetch(`${API_URL}/${endpoint}/${id}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ status: "DOACAO" })
+              })
+            );
+          });
+        }
+      });
+      await Promise.all(allUpdates);
 
       toast({
         title: "Sucesso",
@@ -168,6 +195,7 @@ export function CreateProjectDonationDialog({ userId }: CreateProjectDonationDia
         data: "",
       })
       setSelectedUserId(null)
+      setSelectedUserType(null)
       setSelectedEquipment({})
       setOpen(false)
     } catch (error) {
@@ -188,13 +216,7 @@ export function CreateProjectDonationDialog({ userId }: CreateProjectDonationDia
     setFormData((prev) => ({ ...prev, [id]: value }))
   }
 
-  const handleNameSelect = (value: string) => {
-    const selectedPerson = names.find((n) => n.name === value)
-    if (selectedPerson) {
-      setSelectedUserId(selectedPerson.id)
-      setFormData((prev) => ({ ...prev, nomeOuEmpresa: selectedPerson.name }))
-    }
-  }
+  const filteredNames = names.filter((n) => n.name.toLowerCase().includes(nameSearch.toLowerCase()))
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -210,49 +232,41 @@ export function CreateProjectDonationDialog({ userId }: CreateProjectDonationDia
             </DialogHeader>
           </div>
           <div className="grid gap-2">
-            <Label>Tipo de Usuário</Label>
-            <RadioGroup
-              defaultValue="fisica"
-              onValueChange={(value) => {
-                setUserType(value as UserType)
-                setFormData((prev) => ({ ...prev, nomeOuEmpresa: "" }))
-                setSelectedUserId(null)
-              }}
-              className="flex gap-4"
-            >
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="fisica" id="fisica" />
-                <Label htmlFor="fisica">Pessoa Física</Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="juridica" id="juridica" />
-                <Label htmlFor="juridica">Pessoa Jurídica</Label>
-              </div>
-            </RadioGroup>
-          </div>
-
-          <div className="grid gap-2">
             <Label htmlFor="nomeOuEmpresa">Nome do Destinatário</Label>
-            <Select value={formData.nomeOuEmpresa} onValueChange={handleNameSelect} disabled={isLoading} required>
-              <SelectTrigger>
-                <SelectValue
-                  placeholder={
-                    isLoading
-                      ? "Carregando..."
-                      : userType === "fisica"
-                        ? "Selecione uma pessoa"
-                        : "Selecione uma empresa"
-                  }
-                />
-              </SelectTrigger>
-              <SelectContent>
-                {names.map((option) => (
-                  <SelectItem key={option.id} value={option.name}>
-                    {option.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="relative">
+              <Input
+                id="nomeOuEmpresa"
+                ref={nameInputRef}
+                placeholder={isLoading ? "Carregando..." : "Digite para buscar"}
+                value={nameSearch}
+                onFocus={() => setNameDropdownOpen(true)}
+                onChange={e => {
+                  setNameSearch(e.target.value)
+                  setNameDropdownOpen(true)
+                }}
+                autoComplete="off"
+                required
+              />
+              {nameDropdownOpen && filteredNames.length > 0 && (
+                <div className="absolute z-10 bg-white border rounded shadow w-full max-h-48 overflow-y-auto mt-1">
+                  {filteredNames.map(option => (
+                    <div
+                      key={option.id}
+                      className="px-3 py-2 hover:bg-gray-100 cursor-pointer"
+                      onMouseDown={() => {
+                        setFormData(prev => ({ ...prev, nomeOuEmpresa: option.name }))
+                        setSelectedUserId(option.id)
+                        setSelectedUserType(option.type)
+                        setNameSearch(option.name)
+                        setNameDropdownOpen(false)
+                      }}
+                    >
+                      {option.name}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="grid gap-2">

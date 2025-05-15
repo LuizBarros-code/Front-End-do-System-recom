@@ -54,42 +54,37 @@ export function DetailModal({ isOpen, onClose, itemId, itemType, electronicType 
           break
         case "electronic":
           if (electronicType) {
-            switch (electronicType.toLowerCase()) {
-              case "estabilizador":
-                url = `http://26.99.103.209:3456/estabilizadores/${itemId}`
-                break
-              case "fonte":
-              case "fonte de alimentação":
-                url = `http://26.99.103.209:3456/fontesDeAlimentacao/${itemId}`
-                break
-              case "gabinete":
-                url = `http://26.99.103.209:3456/gabinetes/${itemId}`
-                break
-              case "hd":
-                url = `http://26.99.103.209:3456/hds/${itemId}`
-                break
-              case "impressora":
-                url = `http://26.99.103.209:3456/impressoras/${itemId}`
-                break
-              case "monitor":
-                url = `http://26.99.103.209:3456/monitores/${itemId}`
-                break
-              case "notebook":
-                url = `http://26.99.103.209:3456/notebooks/${itemId}`
-                break
-              case "placa mãe":
-              case "placa mae":
-                url = `http://26.99.103.209:3456/placasMae/${itemId}`
-                break
-              case "processador":
-                url = `http://26.99.103.209:3456/processadores/${itemId}`
-                break
-              case "teclado":
-                url = `http://26.99.103.209:3456/teclados/${itemId}`
-                break
-              default:
-                throw new Error(`Tipo de eletrônico não reconhecido: ${electronicType}`)
-            }
+            // Mapeamento plural/singular e variações para endpoint de dados
+            const typeMap: Record<string, string> = {
+              estabilizador: "estabilizadores",
+              estabilizadores: "estabilizadores",
+              fonte: "fontesDeAlimentacao",
+              "fonte de alimentação": "fontesDeAlimentacao",
+              fontesdealimentacao: "fontesDeAlimentacao",
+              gabinete: "gabinetes",
+              gabinetes: "gabinetes",
+              hd: "hds",
+              hds: "hds",
+              impressora: "impressoras",
+              impressoras: "impressoras",
+              monitor: "monitores",
+              monitores: "monitores",
+              notebook: "notebooks",
+              notebooks: "notebooks",
+              "placa mãe": "placasMae",
+              "placa mae": "placasMae",
+              placasMae: "placasMae",
+              processador: "processadores",
+              processadores: "processadores",
+              teclado: "teclados",
+              teclados: "teclados",
+            };
+            const normalize = (str: string) =>
+              str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s/g, '');
+            const normalizedType = normalize(electronicType);
+            const endpoint = typeMap[normalizedType];
+            if (!endpoint) throw new Error(`Tipo de eletrônico não reconhecido: ${electronicType}`);
+            url = `http://26.99.103.209:3456/${endpoint}/${itemId}`;
           } else {
             throw new Error("Tipo de eletrônico não especificado")
           }
@@ -103,36 +98,6 @@ export function DetailModal({ isOpen, onClose, itemId, itemType, electronicType 
         throw new Error(`Erro ao buscar dados: ${response.status}`)
       }
       const jsonData = await response.json()
-
-      // Se for eletrônico, buscar imagem
-      if (itemType === "electronic" && electronicType) {
-        // Mapear o tipo para o endpoint correto
-        const typeToEndpoint: Record<string, string> = {
-          estabilizador: "estabilizado",
-          "fonte de alimentação": "fonteDeAlimentacao",
-          fonte: "fonteDeAlimentacao",
-          gabinete: "gabinete",
-          hd: "hd",
-          impressora: "impressora",
-          monitor: "monitor",
-          notebook: "notebook",
-          "placa mãe": "placaMae",
-          "placa mae": "placaMae",
-          processador: "processador",
-          teclado: "teclado",
-        }
-        const endpoint = typeToEndpoint[electronicType.toLowerCase()]
-        if (endpoint) {
-          const imgRes = await fetch(`http://localhost:3456/imagens/${endpoint}/${itemId}`)
-          if (imgRes.ok) {
-            const images = await imgRes.json()
-            if (images && images[0]?.url) {
-              jsonData.imagem = `http://localhost:3456${images[0].url}`
-            }
-          }
-        }
-      }
-      setData(jsonData)
 
       // Fetch additional data for project donations
       if (itemType === "project") {
@@ -178,6 +143,59 @@ export function DetailModal({ isOpen, onClose, itemId, itemType, electronicType 
           setData((prevData: any) => ({ ...prevData, requester: requesterData }))
         }
       }
+
+      // Agora sim, busca a imagem e adiciona em jsonData.imagem
+      if (itemType === "electronic" && electronicType) {
+        const imageEndpointMap: Record<string, string> = {
+          estabilizador: "estabilizado",
+          estabilizadores: "estabilizado",
+          fonte: "fonteDeAlimentacao",
+          "fonte de alimentação": "fonteDeAlimentacao",
+          fontesdealimentacao: "fonteDeAlimentacao",
+          gabinete: "gabinete",
+          gabinetes: "gabinete",
+          hd: "hd",
+          hds: "hd",
+          impressora: "impressora",
+          impressoras: "impressora",
+          monitor: "monitor",
+          monitores: "monitor",
+          notebook: "notebook",
+          notebooks: "notebook",
+          "placa mãe": "placaMae",
+          "placa mae": "placaMae",
+          placasMae: "placaMae",
+          processador: "processador",
+          processadores: "processador",
+          teclado: "teclado",
+          teclados: "teclado",
+        };
+        const normalize = (str: string) =>
+          str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s/g, '');
+        const normalizedType = normalize(electronicType);
+        const imageEndpoint = imageEndpointMap[normalizedType];
+        let imgUrl = null;
+        if (imageEndpoint) {
+          try {
+            const imgRes = await fetch(`http://localhost:3456/imagens/${imageEndpoint}/${itemId}`);
+            if (imgRes.ok) {
+              const imgData = await imgRes.json();
+              let caminho = null;
+              if (Array.isArray(imgData) && imgData.length > 0) {
+                caminho = imgData[0].url;
+              } else if (imgData && imgData.url) {
+                caminho = imgData.url;
+              }
+              if (caminho) {
+                let finalPath = caminho.startsWith('/') ? caminho : `/${caminho}`;
+                imgUrl = `http://localhost:3456${finalPath}`;
+              }
+            }
+          } catch {}
+        }
+        jsonData.imagem = imgUrl;
+      }
+      setData(jsonData)
     } catch (err: any) {
       setError(err.message)
     } finally {
@@ -260,26 +278,43 @@ export function DetailModal({ isOpen, onClose, itemId, itemType, electronicType 
   // Função para atualizar status ou situação
   const handleSave = async () => {
     if (!data || !itemType || itemType !== "electronic" || !electronicType) return
-    let endpoint = ""
-    switch (electronicType.toLowerCase()) {
-      case "estabilizador": endpoint = `estabilizadores/${itemId}`; break
-      case "fonte": case "fonte de alimentação": endpoint = `fontesDeAlimentacao/${itemId}`; break
-      case "gabinete": endpoint = `gabinetes/${itemId}`; break
-      case "hd": endpoint = `hds/${itemId}`; break
-      case "impressora": endpoint = `impressoras/${itemId}`; break
-      case "monitor": endpoint = `monitores/${itemId}`; break
-      case "notebook": endpoint = `notebooks/${itemId}`; break
-      case "placa mãe": case "placa mae": endpoint = `placasMae/${itemId}`; break
-      case "processador": endpoint = `processadores/${itemId}`; break
-      case "teclado": endpoint = `teclados/${itemId}`; break
-      default: return
-    }
+    // Mapeamento para endpoint correto
+    const typeMap: Record<string, string> = {
+      estabilizador: "estabilizadores",
+      estabilizadores: "estabilizadores",
+      fonte: "fontesDeAlimentacao",
+      "fonte de alimentação": "fontesDeAlimentacao",
+      fontesdealimentacao: "fontesDeAlimentacao",
+      gabinete: "gabinetes",
+      gabinetes: "gabinetes",
+      hd: "hds",
+      hds: "hds",
+      impressora: "impressoras",
+      impressoras: "impressoras",
+      monitor: "monitores",
+      monitores: "monitores",
+      notebook: "notebooks",
+      notebooks: "notebooks",
+      "placa mãe": "placasMae",
+      "placa mae": "placasMae",
+      placasMae: "placasMae",
+      processador: "processadores",
+      processadores: "processadores",
+      teclado: "teclados",
+      teclados: "teclados",
+    };
+    const normalize = (str: string) =>
+      str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s/g, '');
+    const normalizedType = normalize(electronicType);
+    const endpoint = typeMap[normalizedType];
+    if (!endpoint) return;
     setIsSaving(true)
     try {
       const body: Record<string, string> = {}
       if (pendingStatus !== null && pendingStatus !== data.status) body.status = pendingStatus
       if (pendingSituacao !== null && pendingSituacao !== data.situacao) body.situacao = pendingSituacao
-      const res = await fetch(`http://localhost:3456/${endpoint}`, {
+      if (Object.keys(body).length === 0) return;
+      const res = await fetch(`http://localhost:3456/${endpoint}/${itemId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body)
@@ -301,35 +336,32 @@ export function DetailModal({ isOpen, onClose, itemId, itemType, electronicType 
 
     return (
       <div className="space-y-6">
-        {/* Image Section */}
+        {/* Imagem do eletrônico */}
         <div className="flex justify-center">
           {data.imagem ? (
-            <div className="relative w-full h-64 overflow-hidden rounded-lg">
+            <div className="relative w-full max-w-xs h-56 overflow-hidden rounded-lg border bg-white">
               <img
                 src={getImageUrl(data.imagem) || "/placeholder.svg"}
                 alt={data.nome || "Eletrônico"}
                 className="object-contain w-full h-full"
-                onError={(e) => {
-                  // If the image fails to load, replace with placeholder
-                  e.currentTarget.src = "/placeholder.svg"
-                  console.error("Failed to load image:", data.imagem)
-                }}
+                onError={e => { e.currentTarget.src = "/placeholder.svg"; }}
               />
             </div>
           ) : (
-            <div className="flex items-center justify-center w-full h-64 bg-muted rounded-lg">
+            <div className="flex items-center justify-center w-full h-56 bg-muted rounded-lg">
               <Package className="w-16 h-16 text-muted-foreground" />
             </div>
           )}
         </div>
 
-        {/* Title and Status */}
+        {/* Título e status */}
         <div className="text-center">
-          <h2 className="text-2xl font-bold">{data.nome || "Eletrônico"}</h2>
-          <div className="flex items-center justify-center mt-2 space-x-2">
+          <h2 className="text-2xl font-bold mb-2">{data.nome || "Eletrônico"}</h2>
+          <div className="flex items-center justify-center gap-2 mb-2">
             {data.status && getStatusBadge(data.status)}
             {data.situacao && getStatusBadge(data.situacao)}
           </div>
+          {/* Selects para editar status e situação */}
           <div className="flex flex-col md:flex-row items-center justify-center gap-4 mt-4">
             <div className="min-w-[180px]">
               <Label className="mb-1 block">Status</Label>
@@ -358,7 +390,8 @@ export function DetailModal({ isOpen, onClose, itemId, itemType, electronicType 
               </Select>
             </div>
           </div>
-          {((pendingStatus !== null && pendingStatus !== data.status) || (pendingSituacao !== null && pendingSituacao !== data.situacao)) && (
+          {/* Botão de salvar */}
+          {(pendingStatus !== null && pendingStatus !== data.status) || (pendingSituacao !== null && pendingSituacao !== data.situacao) ? (
             <div className="flex justify-center mt-6">
               <Button
                 onClick={handleSave}
@@ -378,87 +411,34 @@ export function DetailModal({ isOpen, onClose, itemId, itemType, electronicType 
                 {isSaving ? "Salvando..." : "Salvar"}
               </Button>
             </div>
-          )}
+          ) : null}
         </div>
 
         <Separator />
 
-        {/* Details Grid */}
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        {/* Detalhes principais */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {data.tipo && (
-            <Card>
-              <CardContent className="flex items-center p-4 space-x-3">
-                <Tag className="w-5 h-5 text-primary" />
-                <div>
-                  <p className="text-sm text-muted-foreground">Tipo</p>
-                  <p className="font-medium">{data.tipo}</p>
-                </div>
-              </CardContent>
-            </Card>
+            <Card><CardContent className="flex items-center p-4 gap-3"><Tag className="w-5 h-5 text-primary" /><div><p className="text-sm text-muted-foreground">Tipo</p><p className="font-medium">{data.tipo}</p></div></CardContent></Card>
           )}
-
           {data.marca && (
-            <Card>
-              <CardContent className="flex items-center p-4 space-x-3">
-                <Info className="w-5 h-5 text-primary" />
-                <div>
-                  <p className="text-sm text-muted-foreground">Marca</p>
-                  <p className="font-medium">{data.marca}</p>
-                </div>
-              </CardContent>
-            </Card>
+            <Card><CardContent className="flex items-center p-4 gap-3"><Info className="w-5 h-5 text-primary" /><div><p className="text-sm text-muted-foreground">Marca</p><p className="font-medium">{data.marca}</p></div></CardContent></Card>
           )}
-
           {data.modelo && (
-            <Card>
-              <CardContent className="flex items-center p-4 space-x-3">
-                <Cpu className="w-5 h-5 text-primary" />
-                <div>
-                  <p className="text-sm text-muted-foreground">Modelo</p>
-                  <p className="font-medium">{data.modelo}</p>
-                </div>
-              </CardContent>
-            </Card>
+            <Card><CardContent className="flex items-center p-4 gap-3"><Cpu className="w-5 h-5 text-primary" /><div><p className="text-sm text-muted-foreground">Modelo</p><p className="font-medium">{data.modelo}</p></div></CardContent></Card>
           )}
-
           {data.potencia && (
-            <Card>
-              <CardContent className="flex items-center p-4 space-x-3">
-                <HardDrive className="w-5 h-5 text-primary" />
-                <div>
-                  <p className="text-sm text-muted-foreground">Potência</p>
-                  <p className="font-medium">{data.potencia} W</p>
-                </div>
-              </CardContent>
-            </Card>
+            <Card><CardContent className="flex items-center p-4 gap-3"><HardDrive className="w-5 h-5 text-primary" /><div><p className="text-sm text-muted-foreground">Potência</p><p className="font-medium">{data.potencia} W</p></div></CardContent></Card>
           )}
-
           {data.dataDeChegada && (
-            <Card>
-              <CardContent className="flex items-center p-4 space-x-3">
-                <Calendar className="w-5 h-5 text-primary" />
-                <div>
-                  <p className="text-sm text-muted-foreground">Data de Chegada</p>
-                  <p className="font-medium">{formatDate(data.dataDeChegada)}</p>
-                </div>
-              </CardContent>
-            </Card>
+            <Card><CardContent className="flex items-center p-4 gap-3"><Calendar className="w-5 h-5 text-primary" /><div><p className="text-sm text-muted-foreground">Data de Chegada</p><p className="font-medium">{formatDate(data.dataDeChegada)}</p></div></CardContent></Card>
           )}
-
           {data.updatedAt && (
-            <Card>
-              <CardContent className="flex items-center p-4 space-x-3">
-                <Clock className="w-5 h-5 text-primary" />
-                <div>
-                  <p className="text-sm text-muted-foreground">Última Atualização</p>
-                  <p className="font-medium">{formatDate(data.updatedAt)}</p>
-                </div>
-              </CardContent>
-            </Card>
+            <Card><CardContent className="flex items-center p-4 gap-3"><Clock className="w-5 h-5 text-primary" /><div><p className="text-sm text-muted-foreground">Última Atualização</p><p className="font-medium">{formatDate(data.updatedAt)}</p></div></CardContent></Card>
           )}
         </div>
 
-        {/* Description */}
+        {/* Descrição */}
         {data.descricao && (
           <div className="p-4 border rounded-lg">
             <h3 className="mb-2 text-lg font-medium">Descrição</h3>
@@ -466,7 +446,7 @@ export function DetailModal({ isOpen, onClose, itemId, itemType, electronicType 
           </div>
         )}
 
-        {/* Additional Info */}
+        {/* Código de Referência */}
         {data.codigoDeReferencia && (
           <div className="p-4 border rounded-lg">
             <h3 className="mb-2 text-lg font-medium">Código de Referência</h3>

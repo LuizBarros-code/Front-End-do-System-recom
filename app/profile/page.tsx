@@ -20,55 +20,58 @@ interface UserData {
   endereco?: string
   comprovanteDeBaixaRenda?: string
   comprovanteDeProjeto?: string
+  dias?: string
+  horario?: string
+  bolsistaTipo?: string
+  cargo?: string
 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://26.99.103.209:3456"
 
 export default function Profile() {
   const [userData, setUserData] = useState<UserData | null>(null)
-  const [userType, setUserType] = useState<"STUDENT" | "PHYSICAL" | "LEGAL" | null>(null)
+  const [userType, setUserType] = useState<"STUDENT" | "PHYSICAL" | "LEGAL" | "ADMIN" | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
 
   useEffect(() => {
     const fetchUserData = async () => {
       try {
-        const email = localStorage.getItem("userEmail")
-        const matricula = localStorage.getItem("userMatricula")
-        const type = localStorage.getItem("userType") as "STUDENT" | "PHYSICAL" | "LEGAL"
-
-        if (!email && !matricula) {
+        const userId = localStorage.getItem("userId")
+        const userTypeStorage = localStorage.getItem("userType") || localStorage.getItem("userTipo")
+        if (!userId || !userTypeStorage) {
           router.push("/login")
           return
         }
-
-        setUserType(type)
-
         let endpoint = ""
-        if (type === "STUDENT") {
-          endpoint = `${API_URL}/alunos/matricula/${matricula}`
-        } else if (type === "PHYSICAL") {
-          endpoint = `${API_URL}/pessoaFisicas/email/${email}`
-        } else if (type === "LEGAL") {
-          endpoint = `${API_URL}/pessoaJuridicas/email/${email}`
+        let type: "STUDENT" | "PHYSICAL" | "LEGAL" | "ADMIN" = "STUDENT"
+        if (userTypeStorage === "STUDENT" || userTypeStorage === "student") {
+          endpoint = `${API_URL}/alunos/${userId}`
+          type = "STUDENT"
+        } else if (userTypeStorage === "fisico" || userTypeStorage === "PHYSICAL") {
+          endpoint = `${API_URL}/pessoasFisicas/${userId}`
+          type = "PHYSICAL"
+        } else if (userTypeStorage === "juridico" || userTypeStorage === "LEGAL") {
+          endpoint = `${API_URL}/pessoasJuridicas/${userId}`
+          type = "LEGAL"
+        } else if (userTypeStorage === "ADMIN") {
+          endpoint = `${API_URL}/coordenadores/${userId}`
+          type = "ADMIN"
+        } else {
+          router.push("/login")
+          return
         }
-
+        setUserType(type)
         const response = await fetch(endpoint)
-
-        if (!response.ok) {
-          throw new Error("Failed to fetch user data")
-        }
-
-        const data: UserData = await response.json()
+        if (!response.ok) throw new Error("Erro ao buscar dados do usuário")
+        const data = await response.json()
         setUserData(data)
       } catch (error) {
-        console.error("Error fetching user data:", error)
         router.push("/login")
       } finally {
         setIsLoading(false)
       }
     }
-
     fetchUserData()
   }, [router])
 
@@ -98,7 +101,18 @@ export default function Profile() {
   }
 
   return (
-    <div className="container mx-auto max-w-4xl px-4 py-8">
+    <div className="container mx-auto max-w-2xl px-4 py-8">
+      <Button variant="outline" className="mb-4" onClick={() => {
+        if (userType === "STUDENT") {
+          router.push('/student')
+        } else if (userType === "ADMIN") {
+          router.push('/admin')
+        } else {
+          router.push('/dashboard')
+        }
+      }}>
+        Voltar
+      </Button>
       <Card className="mb-8">
         <CardHeader className="pb-4">
           <div className="flex flex-col items-center space-y-4 sm:flex-row sm:space-x-4 sm:space-y-0">
@@ -112,147 +126,145 @@ export default function Profile() {
                 {userType === "STUDENT" && "Estudante"}
                 {userType === "PHYSICAL" && "Pessoa Física"}
                 {userType === "LEGAL" && "Pessoa Jurídica"}
+                {userType === "ADMIN" && "Administrador"}
               </p>
             </div>
           </div>
         </CardHeader>
       </Card>
-
-      <Tabs defaultValue="info" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-1 sm:grid-cols-2">
-          <TabsTrigger value="info">Informações Pessoais</TabsTrigger>
-          <TabsTrigger value="documents">Documentos</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="info">
-          <Card>
-            <CardContent className="p-6">
-              <div className="grid gap-6 md:grid-cols-2">
-                <div className="space-y-4">
-                  <div className="flex items-center space-x-3">
-                    <User className="h-5 w-5 text-muted-foreground" />
-                    <div>
-                      <Label className="text-muted-foreground">Nome</Label>
-                      <p className="font-medium">{userData.name}</p>
-                    </div>
+      <Card>
+        <CardContent className="p-6">
+          <div className="grid gap-6 md:grid-cols-2">
+            <div className="space-y-4">
+              <div>
+                <Label>Nome</Label>
+                <p className="font-medium">{userData.name}</p>
+              </div>
+              <div>
+                <Label>Email</Label>
+                <p className="font-medium">{userData.email}</p>
+              </div>
+              {userType === "STUDENT" && (
+                <>
+                  <div>
+                    <Label>Matrícula</Label>
+                    <p className="font-medium">{userData.matricula}</p>
                   </div>
-
-                  <div className="flex items-center space-x-3">
-                    <Mail className="h-5 w-5 text-muted-foreground" />
-                    <div>
-                      <Label className="text-muted-foreground">Email</Label>
-                      <p className="font-medium">{userData.email}</p>
-                    </div>
+                  <div>
+                    <Label>Curso</Label>
+                    <p className="font-medium">{userData.curso}</p>
                   </div>
-
-                  {userType === "STUDENT" && (
-                    <>
-                      <div className="flex items-center space-x-3">
-                        <GraduationCap className="h-5 w-5 text-muted-foreground" />
-                        <div>
-                          <Label className="text-muted-foreground">Matrícula</Label>
-                          <p className="font-medium">{userData.matricula}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-3">
-                        <Building2 className="h-5 w-5 text-muted-foreground" />
-                        <div>
-                          <Label className="text-muted-foreground">Curso</Label>
-                          <p className="font-medium">{userData.curso}</p>
-                        </div>
-                      </div>
-                    </>
-                  )}
-
-                  {userType === "PHYSICAL" && (
-                    <div className="flex items-center space-x-3">
-                      <User className="h-5 w-5 text-muted-foreground" />
-                      <div>
-                        <Label className="text-muted-foreground">CPF</Label>
-                        <p className="font-medium">{userData.cpf}</p>
-                      </div>
+                  {userData.dias && (
+                    <div>
+                      <Label>Dias</Label>
+                      <p className="font-medium">{userData.dias}</p>
                     </div>
                   )}
-
-                  {userType === "LEGAL" && (
-                    <div className="flex items-center space-x-3">
-                      <Building2 className="h-5 w-5 text-muted-foreground" />
-                      <div>
-                        <Label className="text-muted-foreground">CNPJ</Label>
-                        <p className="font-medium">{userData.cnpj}</p>
-                      </div>
+                  {userData.horario && (
+                    <div>
+                      <Label>Horário</Label>
+                      <p className="font-medium">{userData.horario}</p>
                     </div>
                   )}
-
-                  <div className="flex items-center space-x-3">
-                    <Phone className="h-5 w-5 text-muted-foreground" />
+                  {userData.bolsistaTipo && (
                     <div>
-                      <Label className="text-muted-foreground">Telefone</Label>
-                      <p className="font-medium">{userData.telefone || "Não informado"}</p>
+                      <Label>Tipo de Bolsa</Label>
+                      <p className="font-medium">{userData.bolsistaTipo}</p>
                     </div>
+                  )}
+                  {userData.cargo && (
+                    <div>
+                      <Label>Cargo</Label>
+                      <p className="font-medium">{userData.cargo}</p>
+                    </div>
+                  )}
+                </>
+              )}
+              {userType === "PHYSICAL" && (
+                <>
+                  <div>
+                    <Label>CPF</Label>
+                    <p className="font-medium">{userData.cpf}</p>
                   </div>
-
+                  {userData.telefone && (
+                    <div>
+                      <Label>Telefone</Label>
+                      <p className="font-medium">{userData.telefone}</p>
+                    </div>
+                  )}
                   {userData.endereco && (
-                    <div className="flex items-center space-x-3">
-                      <MapPin className="h-5 w-5 text-muted-foreground" />
-                      <div>
-                        <Label className="text-muted-foreground">Endereço</Label>
-                        <p className="font-medium">{userData.endereco}</p>
-                      </div>
+                    <div>
+                      <Label>Endereço</Label>
+                      <p className="font-medium">{userData.endereco}</p>
                     </div>
                   )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="documents">
-          <Card>
-            <CardContent className="p-6">
-              <div className="space-y-6">
-                {userType === "PHYSICAL" && (
-                  <div className="space-y-2">
-                    <h3 className="font-semibold">Comprovante de Baixa Renda</h3>
-                    {userData.comprovanteDeBaixaRenda ? (
-                      userData.comprovanteDeBaixaRenda.startsWith("http") ? (
-                        <a
-                          href={userData.comprovanteDeBaixaRenda}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 hover:underline"
-                        >
-                          Ver documento
-                        </a>
-                      ) : (
-                        <p className="text-muted-foreground">{userData.comprovanteDeBaixaRenda}</p>
-                      )
-                    ) : (
-                      <p className="text-muted-foreground">Nenhum documento anexado</p>
-                    )}
+                  {userData.comprovanteDeBaixaRenda && (
+                    <div>
+                      <Label>Comprovante de Baixa Renda</Label>
+                      <a href={userData.comprovanteDeBaixaRenda.startsWith('http') ? userData.comprovanteDeBaixaRenda : `http://localhost:3456${userData.comprovanteDeBaixaRenda}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Ver documento</a>
+                    </div>
+                  )}
+                </>
+              )}
+              {userType === "LEGAL" && (
+                <>
+                  <div>
+                    <Label>CNPJ</Label>
+                    <p className="font-medium">{userData.cnpj}</p>
                   </div>
-                )}
-
-                {userType === "LEGAL" && (
-                  <div className="space-y-2">
-                    <h3 className="font-semibold">Comprovante de Projeto</h3>
-                    <p className="text-muted-foreground">
-                      {userData.comprovanteDeProjeto || "Nenhum documento anexado"}
-                    </p>
+                  {userData.telefone && (
+                    <div>
+                      <Label>Telefone</Label>
+                      <p className="font-medium">{userData.telefone}</p>
+                    </div>
+                  )}
+                  {userData.endereco && (
+                    <div>
+                      <Label>Endereço</Label>
+                      <p className="font-medium">{userData.endereco}</p>
+                    </div>
+                  )}
+                  {userData.comprovanteDeProjeto && (
+                    <div>
+                      <Label>Comprovante de Projeto</Label>
+                      <p className="font-medium">{userData.comprovanteDeProjeto}</p>
+                    </div>
+                  )}
+                </>
+              )}
+              {userType === "ADMIN" && (
+                <>
+                  <div>
+                    <Label>Nome</Label>
+                    <p className="font-medium">{userData.name}</p>
                   </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
-
+                  <div>
+                    <Label>Email</Label>
+                    <p className="font-medium">{userData.email}</p>
+                  </div>
+                  {userData.telefone && (
+                    <div>
+                      <Label>Telefone</Label>
+                      <p className="font-medium">{userData.telefone}</p>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
       <div className="mt-6 flex justify-end">
-        <Button
-          onClick={() => router.push(userType === "STUDENT" ? "/student" : "/dashboard")}
-          className="w-full sm:w-auto"
-        >
-          Voltar ao {userType === "STUDENT" ? "Painel do Estudante" : "Dashboard"}
+        <Button onClick={() => {
+          if (userType === "STUDENT") {
+            router.push("/student")
+          } else if (userType === "ADMIN") {
+            router.push("/admin")
+          } else {
+            router.push("/dashboard")
+          }
+        }} className="w-full sm:w-auto">
+          Voltar ao {userType === "STUDENT" ? "Painel do Estudante" : userType === "ADMIN" ? "Painel do Coordenador" : "Dashboard"}
         </Button>
       </div>
     </div>

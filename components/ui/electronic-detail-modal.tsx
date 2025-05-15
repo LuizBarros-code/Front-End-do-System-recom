@@ -10,6 +10,7 @@ import { Calendar, FileText, Tag, Info, Cpu, HardDrive, Monitor, Printer, Smartp
 import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { AvatarFallback } from "@/components/ui/avatar"
 
 interface ElectronicDetailModalProps {
   isOpen: boolean
@@ -32,90 +33,110 @@ interface ElectronicDetails {
   additionalInfo?: string
   status: string
   image?: string
+  tipoDeConexao?: string
 }
 
 export function ElectronicDetailModal({ isOpen, onClose, electronicId, electronicType }: ElectronicDetailModalProps) {
   const [loading, setLoading] = useState(true)
   const [details, setDetails] = useState<ElectronicDetails | null>(null)
+  const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [feedback, setFeedback] = useState("")
   const [newStatus, setNewStatus] = useState("")
+  const [error, setError] = useState(false)
+  const [errorMessage, setErrorMessage] = useState("")
 
   useEffect(() => {
-    if (isOpen && electronicId && electronicType) {
+    const fetchDetails = async () => {
+      if (!electronicId || !electronicType) return
       setLoading(true)
-      const fetchDetails = async () => {
-        try {
-          console.log('electronicType recebido no modal:', electronicType);
-          // Mapear o tipo para o endpoint correto
-          const typeToEndpoint: Record<string, string> = {
-            estabilizador: 'estabilizadores',
-            estabilizadores: 'estabilizadores',
-            fonteDeAlimentacao: 'fontesDeAlimentacao',
-            fontesDeAlimentacao: 'fontesDeAlimentacao',
-            gabinete: 'gabinetes',
-            gabinetes: 'gabinetes',
-            hd: 'hds',
-            hds: 'hds',
-            impressora: 'impressoras',
-            impressoras: 'impressoras',
-            monitor: 'monitores',
-            monitores: 'monitores',
-            notebook: 'notebooks',
-            notebooks: 'notebooks',
-            placaMae: 'placasMae',
-            placasMae: 'placasMae',
-            processador: 'processadores',
-            processadores: 'processadores',
-            teclado: 'teclados',
-            teclados: 'teclados',
-          };
-          const normalizedType = (electronicType || '').toLowerCase().replace(/\s/g, '');
-          const endpoint = typeToEndpoint[normalizedType] || `${normalizedType}s`;
-          // Buscar dados do eletrônico
-          const res = await fetch(`http://localhost:3456/${endpoint}/${electronicId}`)
-          if (!res.ok) throw new Error('Erro ao buscar detalhes do eletrônico')
-          const data = await res.json()
-
-          // Buscar imagem
-          let imgUrl = null
-          try {
-            const imgRes = await fetch(`http://localhost:3456/imagens/${electronicType}/${electronicId}`)
-            if (imgRes.ok) {
-              const imgData = await imgRes.json()
-              let caminho = null
-              if (Array.isArray(imgData) && imgData.length > 0) {
-                caminho = imgData[0].url
-              } else if (imgData && imgData.url) {
-                caminho = imgData.url
-              }
-              if (caminho) {
-                let finalPath = caminho.startsWith('/') ? caminho : `/${caminho}`
-                imgUrl = `http://localhost:3456${finalPath}`
-              }
-            }
-          } catch {}
-
-          setDetails({
-            ...data,
-            image: imgUrl,
-          })
-        } catch (err) {
-          setDetails(null)
-        } finally {
-          setLoading(false)
+      setError(false)
+      setErrorMessage("")
+      try {
+        // Mapear tipo para endpoint correto
+        const typeToEndpoint: Record<string, string> = {
+          mouse: 'mouses',
+          mouses: 'mouses',
+          teclado: 'teclados',
+          teclados: 'teclados',
+          hd: 'hds',
+          hds: 'hds',
+          estabilizador: 'estabilizadores',
+          estabilizadores: 'estabilizadores',
+          fontedealimentacao: 'fontesDeAlimentacao',
+          fontesdealimentacao: 'fontesDeAlimentacao',
+          gabinetes: 'gabinetes',
+          gabinete: 'gabinetes',
+          impressora: 'impressoras',
+          impressoras: 'impressoras',
+          monitor: 'monitores',
+          monitores: 'monitores',
+          notebook: 'notebooks',
+          notebooks: 'notebooks',
+          placamae: 'placasMae',
+          placasMae: 'placasMae',
+          processador: 'processadores',
+          processadores: 'processadores',
         }
+        const normalizedType = (electronicType || '').toLowerCase().replace(/[^a-z]/g, '')
+        const endpoint = typeToEndpoint[normalizedType] || `${normalizedType}s`
+        
+        // Fetch electronic details
+        console.log('FETCH ELETRONICO:', { endpoint, id: electronicId });
+        const response = await fetch(`http://localhost:3456/${endpoint}/${electronicId}`)
+        if (!response.ok) throw new Error('Failed to fetch details')
+        const data = await response.json()
+        
+        // If data is an array, take the first item
+        const electronicData = Array.isArray(data) ? data[0] : data
+        
+        // Fetch image
+        const imageEndpoint = normalizedType === 'mouse' || normalizedType === 'mouses' ? 'mouse' : normalizedType;
+        const imageResponse = await fetch(`http://localhost:3456/imagens/${imageEndpoint}/${electronicId}`)
+        if (imageResponse.ok) {
+          const imageData = await imageResponse.json()
+          if (Array.isArray(imageData) && imageData.length > 0) {
+            const imagePath = imageData[0].url || imageData[0].caminho
+            if (imagePath) {
+              setImageUrl(`http://localhost:3456${imagePath.startsWith('/') ? imagePath : '/' + imagePath}`)
+            }
+          }
+        }
+
+        setDetails({
+          id: electronicData.id,
+          name: electronicData.nome || electronicData.name,
+          type: normalizedType,
+          serialNumber: electronicData.codigoDereferencia || '',
+          model: electronicData.modelo || '',
+          brand: electronicData.marca || '',
+          condition: electronicData.status || '',
+          origin: electronicData.situacao || '',
+          receivedDate: electronicData.dataDeChegada || '',
+          specifications: electronicData.descricao || '',
+          status: electronicData.situacao || '',
+          image: imageUrl,
+          tipoDeConexao: electronicData.tipoDeConexao || ''
+        })
+      } catch (error) {
+        console.error('Error fetching electronic details:', error)
+        setError(true)
+        setErrorMessage('Erro ao carregar dados do equipamento')
+      } finally {
+        setLoading(false)
       }
+    }
+
+    if (isOpen) {
       fetchDetails()
     }
   }, [isOpen, electronicId, electronicType])
 
   const getStatusBadge = (status: string) => {
     const variants = {
-      Disponível: { variant: "success", label: "Disponível" },
-      Reservado: { variant: "outline", label: "Reservado" },
+      "Em estoque": { variant: "success", label: "Em estoque" },
       "Em manutenção": { variant: "default", label: "Em manutenção" },
-      "Em avaliação": { variant: "default", label: "Em avaliação" },
       "Para descarte": { variant: "destructive", label: "Para descarte" },
+      "Usado": { variant: "outline", label: "Usado" }
     }
     const statusInfo = variants[status as keyof typeof variants] || { variant: "default", label: status }
     return <Badge variant={statusInfo.variant as any}>{statusInfo.label}</Badge>
@@ -138,23 +159,56 @@ export function ElectronicDetailModal({ isOpen, onClose, electronicId, electroni
     }
   }
 
-  const handleStatusChange = () => {
-    // Simulação de atualização de status
-    console.log(`Atualizando status do eletrônico ${electronicId} para ${newStatus}`)
-    console.log(`Feedback: ${feedback}`)
+  const handleStatusChange = async () => {
+    if (!electronicId || !electronicType || !newStatus) return;
 
-    // Atualiza o status no objeto de detalhes
-    if (details) {
-      setDetails({
-        ...details,
-        status: newStatus,
-      })
+    try {
+      // Mapear o tipo para o endpoint correto
+      const typeToEndpoint: Record<string, string> = {
+        estabilizador: 'estabilizadores',
+        fontedealimentacao: 'fontesDeAlimentacao',
+        gabinete: 'gabinetes',
+        impressora: 'impressoras',
+        monitor: 'monitores',
+        notebook: 'notebooks',
+        placamae: 'placasMae',
+        processador: 'processadores',
+        teclado: 'teclados',
+      };
+
+      const normalizedType = (electronicType || '').toLowerCase().replace(/\s/g, '');
+      const endpoint = typeToEndpoint[normalizedType] || `${normalizedType}s`;
+
+      // Fazer a requisição para atualizar o status
+      const response = await fetch(`http://localhost:3456/${endpoint}/${electronicId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status: newStatus,
+          feedback: feedback
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Erro ao atualizar status do equipamento');
+      }
+
+      // Atualiza o status no objeto de detalhes
+      if (details) {
+        setDetails({
+          ...details,
+          status: newStatus,
+        });
+      }
+
+      // Fecha o modal após a atualização
+      onClose();
+    } catch (error) {
+      console.error('Erro ao atualizar status:', error);
+      // Aqui você pode adicionar uma notificação de erro se desejar
     }
-
-    // Fecha o modal após um breve delay para mostrar a atualização
-    setTimeout(() => {
-      onClose()
-    }, 1000)
   }
 
   const renderDetailItem = (icon: React.ReactNode, label: string, value: string | number | undefined) => {
@@ -172,23 +226,40 @@ export function ElectronicDetailModal({ isOpen, onClose, electronicId, electroni
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent 
+        className="max-w-4xl max-h-[90vh] overflow-y-auto"
+        aria-describedby="electronic-details-description"
+      >
+        <DialogHeader>
+          <DialogTitle>Detalhes do Eletrônico</DialogTitle>
+          <DialogDescription id="electronic-details-description">
+            {loading
+              ? "Carregando detalhes do eletrônico."
+              : error
+                ? errorMessage
+                : "Veja as informações detalhadas deste equipamento eletrônico."}
+          </DialogDescription>
+        </DialogHeader>
         {loading ? (
           <div className="py-8 text-center">Carregando detalhes do eletrônico...</div>
+        ) : error ? (
+          <div className="flex flex-col items-center py-8">
+            <div className="rounded-full bg-red-100 p-4 mb-4">
+              <span style={{ color: '#ef4444', fontSize: 48 }}>✗</span>
+            </div>
+            <div className="text-lg font-semibold mb-2">Erro ao carregar dados</div>
+            <div className="text-sm text-muted-foreground">{errorMessage}</div>
+            <Button className="mt-6" onClick={onClose}>Fechar</Button>
+          </div>
         ) : details ? (
           <>
-            <DialogHeader>
-              <div className="flex justify-between items-start">
-                <DialogTitle>{details.name}</DialogTitle>
-                {details.status && getStatusBadge(details.status)}
-              </div>
-              <DialogDescription>
-                Veja as informações detalhadas deste equipamento eletrônico.
-              </DialogDescription>
-              <DialogDescription>
-                ID: #{details.id} | Tipo: {details.type.charAt(0).toUpperCase() + details.type.slice(1)}
-              </DialogDescription>
-            </DialogHeader>
+            <div className="flex justify-between items-start">
+              <DialogTitle>{details.name}</DialogTitle>
+              {details.status && getStatusBadge(details.status)}
+            </div>
+            <DialogDescription>
+              ID: #{details.id} | Tipo: {details?.type ? details.type.charAt(0).toUpperCase() + details.type.slice(1) : ""}
+            </DialogDescription>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
               <div className="space-y-4">
@@ -206,81 +277,44 @@ export function ElectronicDetailModal({ isOpen, onClose, electronicId, electroni
                 {renderDetailItem(
                   getTypeIcon(details.type),
                   "Tipo",
-                  details.type.charAt(0).toUpperCase() + details.type.slice(1),
+                  details?.type ? details.type.charAt(0).toUpperCase() + details.type.slice(1) : "",
                 )}
                 {renderDetailItem(<Tag className="h-4 w-4 text-muted-foreground" />, "Marca", details.brand)}
                 {renderDetailItem(<Tag className="h-4 w-4 text-muted-foreground" />, "Modelo", details.model)}
                 {renderDetailItem(
                   <Tag className="h-4 w-4 text-muted-foreground" />,
-                  "Número de Série",
+                  "Código de Referência",
                   details.serialNumber,
                 )}
                 {renderDetailItem(
                   <Calendar className="h-4 w-4 text-muted-foreground" />,
-                  "Data de Recebimento",
+                  "Data de Chegada",
                   new Date(details.receivedDate).toLocaleDateString(),
                 )}
-                {renderDetailItem(<Info className="h-4 w-4 text-muted-foreground" />, "Origem", details.origin)}
+                {renderDetailItem(<Info className="h-4 w-4 text-muted-foreground" />, "Situação", details.origin)}
+                {details.tipoDeConexao && renderDetailItem(
+                  <Info className="h-4 w-4 text-muted-foreground" />,
+                  "Tipo de Conexão",
+                  details.tipoDeConexao
+                )}
               </div>
 
               <div className="space-y-4">
                 <h3 className="text-sm font-medium">Detalhes Técnicos</h3>
-                {renderDetailItem(<Info className="h-4 w-4 text-muted-foreground" />, "Condição", details.condition)}
+                {renderDetailItem(<Info className="h-4 w-4 text-muted-foreground" />, "Estado", details.condition)}
                 {details.specifications &&
                   renderDetailItem(
                     <Cpu className="h-4 w-4 text-muted-foreground" />,
-                    "Especificações",
+                    "Descrição",
                     details.specifications,
                   )}
-                {details.additionalInfo &&
-                  renderDetailItem(
-                    <FileText className="h-4 w-4 text-muted-foreground" />,
-                    "Informações Adicionais",
-                    details.additionalInfo,
-                  )}
               </div>
             </div>
-
-            <Separator className="my-4" />
-
-            <div className="space-y-4">
-              <div>
-                <h3 className="text-sm font-medium mb-2">Atualizar Status</h3>
-                <Select value={newStatus} onValueChange={setNewStatus}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione um status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Disponível">Disponível</SelectItem>
-                    <SelectItem value="Reservado">Reservado</SelectItem>
-                    <SelectItem value="Em manutenção">Em manutenção</SelectItem>
-                    <SelectItem value="Em avaliação">Em avaliação</SelectItem>
-                    <SelectItem value="Para descarte">Para descarte</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <h3 className="text-sm font-medium mb-2">Feedback / Observações</h3>
-                <Textarea
-                  placeholder="Adicione um feedback ou observações sobre este eletrônico"
-                  value={feedback}
-                  onChange={(e) => setFeedback(e.target.value)}
-                  rows={3}
-                />
-              </div>
-
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={onClose}>
-                  Cancelar
-                </Button>
-                <Button onClick={handleStatusChange}>Salvar Alterações</Button>
-              </div>
+            <div className="flex justify-end mt-6">
+              <Button onClick={onClose}>Fechar</Button>
             </div>
           </>
-        ) : (
-          <div className="py-8 text-center">Nenhum detalhe encontrado para este eletrônico.</div>
-        )}
+        ) : null}
       </DialogContent>
     </Dialog>
   )

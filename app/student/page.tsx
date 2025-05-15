@@ -27,6 +27,8 @@ import { CreateElectronicDialog } from "../../components/ui/create-electronic-di
 import { DetailModal } from "../../components/DetailModal"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
+import { toast } from "@/components/ui/use-toast"
+import { EquipmentSelector } from "./equipment-selector"
 
 interface StudentData {
   id: number
@@ -114,6 +116,11 @@ interface AssignedMission {
   assignedDate: string
 }
 
+interface CreateDisposalDialogProps {
+  userId: string
+  onSuccess?: () => void
+}
+
 export default function StudentAdminPage() {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState("project-donations")
@@ -146,6 +153,14 @@ export default function StudentAdminPage() {
   const [isSubmittingReport, setIsSubmittingReport] = useState(false)
   const [isReportDetailOpen, setIsReportDetailOpen] = useState(false)
   const [selectedReport, setSelectedReport] = useState<WeeklyReport | null>(null)
+  const [disposals, setDisposals] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [page, setPage] = useState(1)
+  const itemsPerPage = 5
+  const [disposalRefreshKey, setDisposalRefreshKey] = useState(0)
+  const [selectedDisposal, setSelectedDisposal] = useState<any | null>(null)
+  const [isDetailOpen, setIsDetailOpen] = useState(false)
+  const [isElectronicsModalOpen, setIsElectronicsModalOpen] = useState(false)
 
   const API_URL = "http://26.99.103.209:3456"
 
@@ -226,16 +241,16 @@ export default function StudentAdminPage() {
   const fetchElectronics = async (): Promise<void> => {
     try {
       const endpoints = [
-        { url: "estabilizadores", type: "Estabilizador", img: "estabilizado" },
-        { url: "fontesDeAlimentacao", type: "Fonte de Alimentação", img: "fonteDeAlimentacao" },
-        { url: "gabinetes", type: "Gabinete", img: "gabinete" },
-        { url: "hds", type: "HD", img: "hd" },
-        { url: "impressoras", type: "Impressora", img: "impressora" },
-        { url: "monitores", type: "Monitor", img: "monitor" },
-        { url: "notebooks", type: "Notebook", img: "notebook" },
-        { url: "placasMae", type: "Placa Mãe", img: "placaMae" },
-        { url: "processadores", type: "Processador", img: "processador" },
-        { url: "teclados", type: "Teclado", img: "teclado" },
+        { key: "teclados", url: "teclados", label: "Teclado" },
+        { key: "hds", url: "hds", label: "HD" },
+        { key: "estabilizadores", url: "estabilizadores", label: "Estabilizador" },
+        { key: "monitores", url: "monitores", label: "Monitor" },
+        { key: "mouses", url: "mouses", label: "Mouse" },
+        { key: "gabinetes", url: "gabinetes", label: "Gabinete" },
+        { key: "impressoras", url: "impressoras", label: "Impressora" },
+        { key: "placasMae", url: "placasMae", label: "Placa Mãe" },
+        { key: "notebooks", url: "notebooks", label: "Notebook" },
+        { key: "processadores", url: "processadores", label: "Processador" },
       ];
       const responses = await Promise.all(
         endpoints.map((endpoint) =>
@@ -246,12 +261,10 @@ export default function StudentAdminPage() {
               const withImages = await Promise.all(
                 data.map(async (item: any) => {
                   try {
-                    const imgRes = await fetch(`http://localhost:3456/imagens/${endpoint.img}/${item.id}`);
+                    const imgRes = await fetch(`http://localhost:3456/imagens/${endpoint.label}/${item.id}`);
                     if (imgRes.ok) {
                       const imgData = await imgRes.json();
-                      console.log('imgData para', endpoint.img, item.id, imgData);
                       let caminho = null;
-                      // Se vier array, pega o primeiro
                       if (Array.isArray(imgData) && imgData.length > 0) {
                         caminho = imgData[0].url;
                       } else if (imgData && imgData.caminho) {
@@ -262,11 +275,10 @@ export default function StudentAdminPage() {
                         let finalPath = caminho.startsWith('/') ? caminho : `/${caminho}`;
                         imgUrl = `http://localhost:3456${finalPath}`;
                       }
-                      console.log('imgUrl final para', endpoint.img, item.id, imgUrl);
-                      return { ...item, tipo: endpoint.type, endpointType: endpoint.url, imagem: imgUrl };
+                      return { ...item, tipo: endpoint.label, endpointType: endpoint.url, imagem: imgUrl };
                     }
                   } catch {}
-                  return { ...item, tipo: endpoint.type, endpointType: endpoint.url, imagem: null };
+                  return { ...item, tipo: endpoint.label, endpointType: endpoint.url, imagem: null };
                 })
               );
               return withImages;
@@ -333,6 +345,56 @@ export default function StudentAdminPage() {
   }
 
   const renderFilterPanel = (type: string) => {
+    if (type === "weekly-reports") {
+      return (
+        <Card>
+          <CardHeader>
+            <CardTitle>Filtros</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Pesquisar</Label>
+                <div className="relative">
+                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Pesquisar por título..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-8"
+                  />
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      );
+    }
+    if (type === "assigned-missions") {
+      return (
+        <Card>
+          <CardHeader>
+            <CardTitle>Filtros</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Pesquisar</Label>
+                <div className="relative">
+                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Pesquisar..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-8"
+                  />
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      );
+    }
     return (
       <Card>
         <CardHeader>
@@ -345,7 +407,7 @@ export default function StudentAdminPage() {
               <div className="relative">
                 <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Pesquisar..."
+                  placeholder={type === "eletronicos" ? "Pesquisar por nome..." : "Pesquisar..."}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-8"
@@ -354,21 +416,40 @@ export default function StudentAdminPage() {
             </div>
 
             <div className="space-y-2">
-              <Label>Status</Label>
+              <Label>{type === "eletronicos" ? "Tipo" : "Status"}</Label>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Filtrar por status" />
+                  <SelectValue placeholder={type === "eletronicos" ? "Filtrar por tipo" : "Filtrar por status"} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Todos os status</SelectItem>
-                  <SelectItem value="PENDING">Pendentes</SelectItem>
-                  <SelectItem value="APPROVED">Aprovados</SelectItem>
-                  <SelectItem value="REJECTED">Rejeitados</SelectItem>
+                  <SelectItem value="all">Todos os tipos</SelectItem>
+                  {type === "eletronicos" ? (
+                    <>
+                      <SelectItem value="Teclado">Teclado</SelectItem>
+                      <SelectItem value="HD">HD</SelectItem>
+                      <SelectItem value="Fonte de Alimentação">Fonte de Alimentação</SelectItem>
+                      <SelectItem value="Gabinete">Gabinete</SelectItem>
+                      <SelectItem value="Monitor">Monitor</SelectItem>
+                      <SelectItem value="Mouse">Mouse</SelectItem>
+                      <SelectItem value="Estabilizador">Estabilizador</SelectItem>
+                      <SelectItem value="Impressora">Impressora</SelectItem>
+                      <SelectItem value="Placa Mãe">Placa Mãe</SelectItem>
+                      <SelectItem value="Notebook">Notebook</SelectItem>
+                      <SelectItem value="Processador">Processador</SelectItem>
+                    </>
+                  ) : (
+                    <>
+                      <SelectItem value="pendente">Pendentes</SelectItem>
+                      <SelectItem value="aprovado">Aprovados</SelectItem>
+                      <SelectItem value="rejeitado">Rejeitados</SelectItem>
+                    </>
+                  )}
                 </SelectContent>
               </Select>
             </div>
           </div>
 
+          {/* Urgência só para requests, não para eletrônicos */}
           {type === "requests" && (
             <>
               <Separator />
@@ -455,6 +536,75 @@ export default function StudentAdminPage() {
     setSelectedReport(null)
   }
 
+  useEffect(() => {
+    async function fetchDisposals() {
+      setLoading(true);
+      try {
+        const res = await fetch("http://localhost:3456/descartes");
+        const data = await res.json();
+        setDisposals(data);
+        console.log("Quantidade máxima de descartes retornados pelo backend:", data.length);
+        // Se a página atual não existir mais, volta para a última página disponível
+        const totalPages = Math.ceil(data.length / itemsPerPage);
+        if (page > totalPages) setPage(totalPages > 0 ? totalPages : 1);
+      } catch (e) {
+        setDisposals([]);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchDisposals();
+  }, [disposalRefreshKey]);
+
+  // Função para filtrar eletrônicos por nome e tipo
+  const getFilteredElectronics = () => {
+    return electronics.filter((electronic) => {
+      const matchesSearch =
+        searchTerm.trim() === "" ||
+        (electronic.nome && electronic.nome.toLowerCase().includes(searchTerm.toLowerCase()));
+      const matchesType =
+        statusFilter === "all" ||
+        (electronic.tipo && electronic.tipo === statusFilter);
+      return matchesSearch && matchesType;
+    });
+  };
+
+  // Funções de refresh para cada aba
+  const handleRefreshProjectDonations = async () => {
+    try {
+      const res = await fetch(`${API_URL}/doacoes`);
+      if (res.ok) setProjectDonations(await res.json());
+    } catch {}
+  };
+  const handleRefreshUserDonations = async () => {
+    try {
+      const res = await fetch(`${API_URL}/doacoesUsuarios`);
+      if (res.ok) setUserDonations(await res.json());
+    } catch {}
+  };
+  const handleRefreshStudentRequests = async () => {
+    try {
+      const res = await fetch(`${API_URL}/solicitacoes`);
+      if (res.ok) setStudentRequests(await res.json());
+    } catch {}
+  };
+  const handleRefreshDisposals = () => setDisposalRefreshKey(k => k + 1);
+  const handleRefreshElectronics = () => fetchElectronics();
+  const handleRefreshWeeklyReports = async () => {
+    if (!studentData?.id) return;
+    try {
+      const res = await fetch(`http://localhost:3456/relatorios/usuario/${studentData.id}`);
+      if (res.ok) setWeeklyReports(await res.json());
+    } catch {}
+  };
+  const handleRefreshAssignedMissions = async () => {
+    if (!studentData?.id) return;
+    try {
+      const res = await fetch(`http://localhost:3456/missoes/usuario/${studentData.id}`);
+      if (res.ok) setAssignedMissions(await res.json());
+    } catch {}
+  };
+
   if (isLoading) {
     return <div>Carregando...</div>
   }
@@ -512,7 +662,10 @@ export default function StudentAdminPage() {
                     Aqui você pode visualizar as doações realizadas pelo projeto RECOM para pessoas e entidades sem fins lucrativos.
                   </CardDescription>
                 </div>
-                <CreateProjectDonationDialog userId={studentData?.id?.toString() ?? ""} />
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={handleRefreshProjectDonations}>Atualizar</Button>
+                  <CreateProjectDonationDialog userId={studentData?.id?.toString() ?? ""} />
+                </div>
               </CardHeader>
               <CardContent>
                 {projectDonations.length > 0 ? (
@@ -563,50 +716,61 @@ export default function StudentAdminPage() {
           <div className="grid grid-cols-1 md:grid-cols-[300px_1fr] gap-6">
             {renderFilterPanel("user-donations")}
             <Card>
-              <CardHeader>
-                <CardTitle>Doações de Usuários</CardTitle>
-                <CardDescription>Aqui você pode ver doações feitas por usuários individuais.</CardDescription>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>Doações de Usuários</CardTitle>
+                  <CardDescription>Aqui você pode ver doações feitas por usuários individuais.</CardDescription>
+                </div>
+                <Button variant="outline" onClick={handleRefreshUserDonations}>Atualizar</Button>
               </CardHeader>
               <CardContent>
-                {userDonations.length > 0 ? (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>ID</TableHead>
-                        <TableHead>Nome</TableHead>
-                        <TableHead>Eletrônicos</TableHead>
-                        <TableHead>Data</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Ações</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {userDonations.map((donation) => (
-                        <TableRow key={donation.id}>
-                          <TableCell>#{donation.id}</TableCell>
-                          <TableCell>{donation.name}</TableCell>
-                          <TableCell>{donation.eletronicos}</TableCell>
-                          <TableCell>
-                            <div className="flex items-center">
-                              <Calendar className="w-4 h-4 mr-2 text-muted-foreground" />
-                              {new Date(donation.data).toLocaleDateString()}
-                            </div>
-                          </TableCell>
-                          <TableCell>{getStatusBadge(donation.status)}</TableCell>
-                          <TableCell>
-                            <Button size="sm" variant="outline" onClick={() => handleOpenModal(donation.id, "user")}>
-                              Ver Detalhes
-                            </Button>
-                          </TableCell>
+                {(() => {
+                  // Filtragem por status e nome
+                  const filteredDonations = userDonations.filter((donation) => {
+                    const matchesStatus = statusFilter === "all" || donation.status === statusFilter;
+                    const matchesSearch =
+                      searchTerm.trim() === "" ||
+                      donation.name.toLowerCase().includes(searchTerm.toLowerCase());
+                    return matchesStatus && matchesSearch;
+                  });
+                  return filteredDonations.length > 0 ? (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>ID</TableHead>
+                          <TableHead>Nome</TableHead>
+                          <TableHead>Eletrônicos</TableHead>
+                          <TableHead>Data</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Ações</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                ) : (
-                  <div className="text-center py-4">
-                    <p>Ainda não há doações de usuários disponíveis.</p>
-                  </div>
-                )}
+                      </TableHeader>
+                      <TableBody>
+                        {filteredDonations.map((donation) => (
+                          <TableRow key={donation.id}>
+                            <TableCell>#{donation.id}</TableCell>
+                            <TableCell>{donation.name}</TableCell>
+                            <TableCell>{donation.eletronicos}</TableCell>
+                            <TableCell>
+                              <div className="flex items-center">
+                                <Calendar className="w-4 h-4 mr-2 text-muted-foreground" />
+                                {new Date(donation.data).toLocaleDateString()}
+                              </div>
+                            </TableCell>
+                            <TableCell>{getStatusBadge(donation.status)}</TableCell>
+                            <TableCell>
+                              <Button size="sm" variant="outline" onClick={() => handleOpenModal(donation.id, "user")}>Ver Detalhes</Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  ) : (
+                    <div className="text-center py-4">
+                      <p>Ainda não há doações de usuários disponíveis.</p>
+                    </div>
+                  );
+                })()}
               </CardContent>
             </Card>
           </div>
@@ -616,50 +780,61 @@ export default function StudentAdminPage() {
           <div className="grid grid-cols-1 md:grid-cols-[300px_1fr] gap-6">
             {renderFilterPanel("requests")}
             <Card>
-              <CardHeader>
-                <CardTitle>Minhas Solicitações</CardTitle>
-                <CardDescription>Aqui você pode ver suas solicitações existentes e criar novas.</CardDescription>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>Minhas Solicitações</CardTitle>
+                  <CardDescription>Aqui você pode ver suas solicitações existentes e criar novas.</CardDescription>
+                </div>
+                <Button variant="outline" onClick={handleRefreshStudentRequests}>Atualizar</Button>
               </CardHeader>
               <CardContent>
-                {studentRequests.length > 0 ? (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>ID</TableHead>
-                        <TableHead>Nome</TableHead>
-                        <TableHead>Eletrônicos</TableHead>
-                        <TableHead>Data</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Ações</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {studentRequests.map((request) => (
-                        <TableRow key={request.id}>
-                          <TableCell>#{request.id}</TableCell>
-                          <TableCell>{request.name}</TableCell>
-                          <TableCell>{request.eletronicos}</TableCell>
-                          <TableCell>
-                            <div className="flex items-center">
-                              <Calendar className="w-4 h-4 mr-2 text-muted-foreground" />
-                              {new Date(request.data).toLocaleDateString()}
-                            </div>
-                          </TableCell>
-                          <TableCell>{getStatusBadge(request.status)}</TableCell>
-                          <TableCell>
-                            <Button size="sm" variant="outline" onClick={() => handleOpenModal(request.id, "request")}>
-                              Ver Detalhes
-                            </Button>
-                          </TableCell>
+                {(() => {
+                  // Filtragem por status e nome
+                  const filteredRequests = studentRequests.filter((request) => {
+                    const matchesStatus = statusFilter === "all" || request.status === statusFilter;
+                    const matchesSearch =
+                      searchTerm.trim() === "" ||
+                      request.name.toLowerCase().includes(searchTerm.toLowerCase());
+                    return matchesStatus && matchesSearch;
+                  });
+                  return filteredRequests.length > 0 ? (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>ID</TableHead>
+                          <TableHead>Nome</TableHead>
+                          <TableHead>Eletrônicos</TableHead>
+                          <TableHead>Data</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Ações</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                ) : (
-                  <div className="text-center py-4">
-                    <p>Você ainda não tem solicitações.</p>
-                  </div>
-                )}
+                      </TableHeader>
+                      <TableBody>
+                        {filteredRequests.map((request) => (
+                          <TableRow key={request.id}>
+                            <TableCell>#{request.id}</TableCell>
+                            <TableCell>{request.name}</TableCell>
+                            <TableCell>{request.eletronicos}</TableCell>
+                            <TableCell>
+                              <div className="flex items-center">
+                                <Calendar className="w-4 h-4 mr-2 text-muted-foreground" />
+                                {request.data ? new Date(request.data).toLocaleDateString() : "-"}
+                              </div>
+                            </TableCell>
+                            <TableCell>{getStatusBadge(request.status)}</TableCell>
+                            <TableCell>
+                              <Button size="sm" variant="outline" onClick={() => handleOpenModal(request.id, "request")}>Ver Detalhes</Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  ) : (
+                    <div className="text-center py-4">
+                      <p>Você ainda não tem solicitações.</p>
+                    </div>
+                  );
+                })()}
               </CardContent>
             </Card>
           </div>
@@ -668,15 +843,18 @@ export default function StudentAdminPage() {
           <div className="grid grid-cols-1 md:grid-cols-[300px_1fr] gap-6">
             {renderFilterPanel("descarte")}
             <Card>
-              <CardHeader>
-                <CardTitle>Descarte de Equipamentos</CardTitle>
-                <CardDescription>Gerencie o descarte adequado de equipamentos eletrônicos.</CardDescription>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>Descarte de Equipamentos</CardTitle>
+                  <CardDescription>Gerencie o descarte adequado de equipamentos eletrônicos.</CardDescription>
+                </div>
+                <Button variant="outline" onClick={handleRefreshDisposals}>Atualizar</Button>
               </CardHeader>
               <CardContent>
-                <div className="text-center py-4">
-                  <p>Área de descarte em desenvolvimento.</p>
-                  <CreateDisposalDialog userId={studentData?.id ? studentData.id.toString() : ""} />
+                <div className="mb-4">
+                  <CreateDisposalDialog userId={studentData?.id ? studentData.id.toString() : ""} onSuccess={() => setDisposalRefreshKey(k => k + 1)} />
                 </div>
+                <DisposalsList refreshKey={disposalRefreshKey} />
               </CardContent>
             </Card>
           </div>
@@ -691,7 +869,10 @@ export default function StudentAdminPage() {
                   <CardTitle>Gestão de Eletrônicos</CardTitle>
                   <CardDescription>Visualize e gerencie equipamentos eletrônicos disponíveis.</CardDescription>
                 </div>
-                <Button onClick={() => setIsCreateDialogOpen(true)}>Cadastrar Eletrônico</Button>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={handleRefreshElectronics}>Atualizar</Button>
+                  <Button onClick={() => setIsCreateDialogOpen(true)}>Cadastrar Eletrônico</Button>
+                </div>
                 <CreateElectronicDialog
                   userId={studentData?.id ? studentData.id.toString() : ""}
                   open={isCreateDialogOpen}
@@ -703,41 +884,61 @@ export default function StudentAdminPage() {
                 />
               </CardHeader>
               <CardContent>
-                {electronics.length > 0 ? (
+                {getFilteredElectronics().length > 0 ? (
                   <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead>ID</TableHead>
-                        <TableHead>Imagem</TableHead>
                         <TableHead>Nome</TableHead>
                         <TableHead>Tipo</TableHead>
                         <TableHead>Ações</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {electronics.map((electronic) => (
-                        <TableRow key={`${electronic.endpointType}-${electronic.id}`}>
-                          <TableCell>#{electronic.id}</TableCell>
-                          <TableCell>
-                            <img
-                              src={electronic.imagem || "/placeholder.svg"}
-                              alt={electronic.nome}
-                              className="w-10 h-10 object-cover rounded"
-                            />
-                          </TableCell>
-                          <TableCell>{electronic.nome}</TableCell>
-                          <TableCell>{electronic.tipo}</TableCell>
-                          <TableCell>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleOpenModal(electronic.id, "electronic", electronic.endpointType)}
-                            >
-                              Ver Detalhes
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      {getFilteredElectronics().map((electronic) => {
+                        const pluralToSingular: Record<string, string> = {
+                          teclados: "teclado",
+                          hds: "hd",
+                          fontesDeAlimentacao: "fontedealimentacao",
+                          gabinetes: "gabinete",
+                          monitores: "monitor",
+                          mouses: "mouse",
+                          estabilizadores: "estabilizador",
+                          impressoras: "impressora",
+                          notebooks: "notebook",
+                          placasMae: "placamae",
+                          processadores: "processador",
+                        };
+                        let singularType = electronic.tipo;
+                        if (electronic.endpointType && pluralToSingular.hasOwnProperty(electronic.endpointType)) {
+                          singularType = pluralToSingular[electronic.endpointType];
+                        } else if (pluralToSingular.hasOwnProperty(electronic.tipo)) {
+                          singularType = pluralToSingular[electronic.tipo];
+                        }
+                        // Só mostrar botão de detalhes se não for tipo desconhecido
+                        const tiposSuportados = [
+                          "teclado", "hd", "fontedealimentacao", "gabinete", "monitor", "mouse", "estabilizador", "impressora", "notebook", "placamae", "processador"
+                        ];
+                        const mostrarDetalhes = tiposSuportados.includes(singularType);
+                        return (
+                          <TableRow key={`${electronic.endpointType}-${electronic.id}`}>
+                            <TableCell>#{electronic.id}</TableCell>
+                            <TableCell>{electronic.nome}</TableCell>
+                            <TableCell>{electronic.tipo}</TableCell>
+                            <TableCell>
+                              {mostrarDetalhes && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleOpenModal(electronic.id, "electronic", singularType)}
+                                >
+                                  Ver Detalhes
+                                </Button>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 ) : (
@@ -758,46 +959,53 @@ export default function StudentAdminPage() {
                   <CardTitle>Relatórios Semanais</CardTitle>
                   <CardDescription>Acompanhe seus relatórios semanais de atividades.</CardDescription>
                 </div>
+                <Button variant="outline" onClick={handleRefreshWeeklyReports}>Atualizar</Button>
                 <Button onClick={handleOpenReportModal}>Novo Relatório</Button>
               </CardHeader>
               <CardContent>
-                {weeklyReports.length > 0 ? (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>ID</TableHead>
-                        <TableHead>Título</TableHead>
-                        <TableHead>Semana</TableHead>
-                        <TableHead>Data de Envio</TableHead>
-                        <TableHead>Ações</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {weeklyReports.map((report) => (
-                        <TableRow key={report.id}>
-                          <TableCell>#{report.id}</TableCell>
-                          <TableCell>{report.name}</TableCell>
-                          <TableCell>{report.periodo}</TableCell>
-                          <TableCell>
-                            <div className="flex items-center">
-                              <Calendar className="w-4 h-4 mr-2 text-muted-foreground" />
-                              {report.createdAt ? new Date(report.createdAt).toLocaleDateString() : "N/A"}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <Button size="sm" variant="outline" onClick={() => handleOpenReportDetail(report)}>
-                              Ver Detalhes
-                            </Button>
-                          </TableCell>
+                {(() => {
+                  const filteredReports = weeklyReports.filter((report) =>
+                    searchTerm.trim() === "" ||
+                    (report.name && report.name.toLowerCase().includes(searchTerm.toLowerCase()))
+                  );
+                  return filteredReports.length > 0 ? (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>ID</TableHead>
+                          <TableHead>Título</TableHead>
+                          <TableHead>Semana</TableHead>
+                          <TableHead>Data de Envio</TableHead>
+                          <TableHead>Ações</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                ) : (
-                  <div className="text-center py-4">
-                    <p>Você ainda não tem relatórios semanais.</p>
-                  </div>
-                )}
+                      </TableHeader>
+                      <TableBody>
+                        {filteredReports.map((report) => (
+                          <TableRow key={report.id}>
+                            <TableCell>#{report.id}</TableCell>
+                            <TableCell>{report.name}</TableCell>
+                            <TableCell>{report.periodo}</TableCell>
+                            <TableCell>
+                              <div className="flex items-center">
+                                <Calendar className="w-4 h-4 mr-2 text-muted-foreground" />
+                                {report.createdAt ? new Date(report.createdAt).toLocaleDateString() : "N/A"}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Button size="sm" variant="outline" onClick={() => handleOpenReportDetail(report)}>
+                                Ver Detalhes
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  ) : (
+                    <div className="text-center py-4">
+                      <p>Você ainda não tem relatórios semanais.</p>
+                    </div>
+                  );
+                })()}
               </CardContent>
             </Card>
           </div>
@@ -807,9 +1015,12 @@ export default function StudentAdminPage() {
           <div className="grid grid-cols-1 md:grid-cols-[300px_1fr] gap-6">
             {renderFilterPanel("assigned-missions")}
             <Card>
-              <CardHeader>
-                <CardTitle>Missões Atribuídas</CardTitle>
-                <CardDescription>Visualize e gerencie as missões atribuídas a você.</CardDescription>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>Missões Atribuídas</CardTitle>
+                  <CardDescription>Visualize e gerencie as missões atribuídas a você.</CardDescription>
+                </div>
+                <Button variant="outline" onClick={handleRefreshAssignedMissions}>Atualizar</Button>
               </CardHeader>
               <CardContent>
                 {assignedMissions.length > 0 ? (
@@ -868,7 +1079,14 @@ export default function StudentAdminPage() {
           </div>
         </TabsContent>
       </Tabs>
-      {selectedItem && (
+      {selectedItem && selectedItem.type === "project" && (
+        <ProjectDonationDetailModal
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          donationId={selectedItem.id}
+        />
+      )}
+      {selectedItem && selectedItem.type !== "project" && (
         <DetailModal
           isOpen={isModalOpen}
           onClose={() => setIsModalOpen(false)}
@@ -978,7 +1196,464 @@ export default function StudentAdminPage() {
           )}
         </DialogContent>
       </Dialog>
+      <DisposalDetailModal
+        isOpen={isDetailOpen}
+        onClose={() => setIsDetailOpen(false)}
+        disposalId={selectedDisposal?.id}
+      />
     </div>
   )
+}
+
+function DisposalsList({ refreshKey }: { refreshKey?: number }) {
+  const [disposals, setDisposals] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const itemsPerPage = 5;
+  const [selectedDisposal, setSelectedDisposal] = useState<any | null>(null);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
+
+  useEffect(() => {
+    async function fetchDisposals() {
+      setLoading(true);
+      try {
+        const res = await fetch("http://localhost:3456/descartes");
+        const data = await res.json();
+        setDisposals(data);
+        console.log("Quantidade máxima de descartes retornados pelo backend:", data.length);
+        // Se a página atual não existir mais, volta para a última página disponível
+        const totalPages = Math.ceil(data.length / itemsPerPage);
+        if (page > totalPages) setPage(totalPages > 0 ? totalPages : 1);
+      } catch (e) {
+        setDisposals([]);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchDisposals();
+  }, [refreshKey]);
+
+  if (loading) return <div>Carregando descartes...</div>;
+  if (!disposals.length) return <div>Nenhum descarte encontrado.</div>;
+
+  // Paginação
+  const totalPages = Math.ceil(disposals.length / itemsPerPage);
+  const paginatedDisposals = disposals.slice((page - 1) * itemsPerPage, page * itemsPerPage);
+  console.log(`Página ${page} de ${totalPages} | Exibindo descartes:`, paginatedDisposals.length, '/', disposals.length);
+
+  return (
+    <div className="grid gap-4 mt-6">
+      {paginatedDisposals.map((d, idx) => (
+        <div key={d.id} className="border rounded-md p-4 bg-white shadow">
+          <div className="text-xs text-gray-400">Índice global: {(page - 1) * itemsPerPage + idx + 1}</div>
+          <div className="font-bold text-lg">{d.name}</div>
+          <div className="text-sm text-muted-foreground mb-2">Código: {d.codigoDeReferencias}</div>
+          <div className="text-sm">Data: {d.data ? new Date(d.data.split('T')[0]).toLocaleDateString() : "-"}</div>
+          <div className="text-sm">Status: {d.status || "-"}</div>
+          <div className="mt-2">
+            <div className="font-medium">Eletrônicos:</div>
+            <ul className="list-disc ml-6">
+              {Object.entries(d).filter(([k, v]) => Array.isArray(v) && v.length > 0).map(([cat, arr]) => (
+                <li key={cat}>
+                  <span className="capitalize font-semibold">{cat}:</span> {(arr as any[]).map((e: any) => e.nome || e.name || e.id).join(", ")}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="mt-4 flex justify-end">
+            <button
+              className="px-3 py-1 rounded bg-blue-600 text-white hover:bg-blue-700"
+              onClick={() => { setSelectedDisposal(d); setIsDetailOpen(true); }}
+            >
+              Ver Mais
+            </button>
+          </div>
+        </div>
+      ))}
+      {/* Paginação */}
+      {totalPages > 1 && (
+        <div className="flex gap-2 justify-center mt-4">
+          {Array.from({ length: totalPages }, (_, i) => i + 1).map((num) => (
+            <button
+              key={num}
+              onClick={() => setPage(num)}
+              className={`px-3 py-1 rounded ${num === page ? "bg-black text-white" : "bg-gray-200 text-black"}`}
+            >
+              {num}
+            </button>
+          ))}
+        </div>
+      )}
+      <DisposalDetailModal
+        isOpen={isDetailOpen}
+        onClose={() => setIsDetailOpen(false)}
+        disposalId={selectedDisposal?.id}
+      />
+    </div>
+  );
+}
+
+// Modal de detalhes do descarte
+function DisposalDetailModal({ isOpen, onClose, disposalId }: { isOpen: boolean, onClose: () => void, disposalId?: number }) {
+  const [disposal, setDisposal] = useState<any | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [electronics, setElectronics] = useState<any[]>([]);
+  const [isElectronicsModalOpen, setIsElectronicsModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen || !disposalId) return;
+    setLoading(true);
+    // Buscar detalhes do descarte
+    fetch(`http://26.99.103.209:3456/descartes/${disposalId}`)
+      .then(res => res.json())
+      .then(data => setDisposal(data))
+      .catch(() => setDisposal(null));
+    // Buscar eletrônicos de todas as categorias
+    const endpoints = [
+      { key: "teclados", url: "teclados", label: "Teclados" },
+      { key: "hds", url: "hds", label: "HDs" },
+      { key: "estabilizadores", url: "estabilizadores", label: "Estabilizadores" },
+      { key: "monitores", url: "monitores", label: "Monitores" },
+      { key: "mouses", url: "mouses", label: "Mouses" },
+      { key: "gabinetes", url: "gabinetes", label: "Gabinetes" },
+      { key: "impressoras", url: "impressoras", label: "Impressoras" },
+      { key: "placasMae", url: "placasMae", label: "Placas Mãe" },
+      { key: "notebooks", url: "notebooks", label: "Notebooks" },
+      { key: "processadores", url: "processadores", label: "Processadores" },
+    ];
+    Promise.all(
+      endpoints.map(async (ep) => {
+        const res = await fetch(`http://26.99.103.209:3456/descartes/${disposalId}/${ep.url}`);
+        if (!res.ok) return { key: ep.key, label: ep.label, items: [] };
+        const data = await res.json();
+        return { key: ep.key, label: ep.label, items: Array.isArray(data) ? data.map(item => ({ ...item, tipoCategoria: ep.key })) : [] };
+      })
+    ).then((all) => setElectronics(all));
+    setLoading(false);
+  }, [isOpen, disposalId]);
+
+  // Verifica se há algum eletrônico em qualquer categoria
+  const hasAnyElectronics = electronics.some(cat => cat.items && cat.items.length > 0);
+
+  // Função para buscar imagem de um eletrônico (agora dentro do componente)
+  const getElectronicImage = async (catKey: string, id: number) => {
+    const imageEndpointMap: Record<string, string> = {
+      teclados: "teclado",
+      hds: "hd",
+      fontesDeAlimentacao: "fonteDeAlimentacao",
+      gabinetes: "gabinete",
+      monitores: "monitor",
+      mouses: "mouse",
+      estabilizadores: "estabilizado",
+      impressoras: "impressora",
+      placasMae: "placaMae",
+      notebooks: "notebook",
+      processadores: "processador",
+    };
+    const endpoint = imageEndpointMap[catKey];
+    if (!endpoint) return null;
+    try {
+      const res = await fetch(`http://localhost:3456/imagens/${endpoint}/${id}`);
+      if (!res.ok) return null;
+      const data = await res.json();
+      console.log("Imagem retornada:", data);
+      // Tente url, caminho, ou outro campo
+      if (Array.isArray(data) && data.length > 0) {
+        const caminho = data[0].url || data[0].caminho;
+        if (caminho) return `http://localhost:3456${caminho.startsWith('/') ? caminho : '/' + caminho}`;
+      }
+      if (data && (data.url || data.caminho)) {
+        const caminho = data.url || data.caminho;
+        return `http://localhost:3456${caminho.startsWith('/') ? caminho : '/' + caminho}`;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Detalhes do Descarte</DialogTitle>
+        </DialogHeader>
+        {loading || !disposal ? (
+          <div>Carregando...</div>
+        ) : (
+          <div className="space-y-4">
+            <div>
+              <strong>Nome:</strong> {disposal.name}
+            </div>
+            <div>
+              <strong>Descrição:</strong> {disposal.descricao}
+            </div>
+            <div>
+              <strong>Data:</strong> {disposal.data ? new Date(disposal.data.split('T')[0]).toLocaleDateString() : "-"}
+            </div>
+            <div>
+              <strong>Código de Referência:</strong> {disposal.codigoDeReferencias}
+            </div>
+            <div>
+              <strong>ID Usuário:</strong> {disposal.usuarioId}
+            </div>
+            <div className="mt-4">
+              <strong>Eletrônicos deste descarte:</strong>
+              {electronics.map((cat) => (
+                <div key={cat.label} className="mt-2">
+                  <span className="font-semibold">{cat.label}:</span> {cat.items.length > 0 ? cat.items.map((e: any) => e.nome || e.name || e.id).join(", ") : "Nenhum"}
+                </div>
+              ))}
+            </div>
+            {hasAnyElectronics && (
+              <div className="mt-4 flex justify-end">
+                <button
+                  className="px-3 py-1 rounded bg-blue-600 text-white hover:bg-blue-700"
+                  onClick={() => setIsElectronicsModalOpen(true)}
+                >
+                  Ver Eletrônicos
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </DialogContent>
+      {/* Modal de Eletrônicos */}
+      <Dialog open={isElectronicsModalOpen} onOpenChange={setIsElectronicsModalOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Eletrônicos do Descarte</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+            {electronics.filter(cat => cat.items.length > 0).length === 0 ? (
+              <div>Nenhum eletrônico associado a este descarte.</div>
+            ) : (
+              electronics.filter(cat => cat.items.length > 0).map(cat => (
+                <div key={cat.label}>
+                  <div className="font-semibold mb-1">{cat.label}:</div>
+                  <ul className="list-disc ml-6">
+                    {cat.items.map((e: any) => (
+                      <ElectronicWithImage key={e.id} catKey={e.tipoCategoria} electronic={e} />
+                    ))}
+                  </ul>
+                </div>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </Dialog>
+  );
+}
+
+// Componente auxiliar para exibir eletrônico com imagem
+function ElectronicWithImage({ catKey, electronic }: { catKey: string, electronic: any }) {
+  console.log('Renderizando ElectronicWithImage', catKey, electronic);
+  const [imgUrl, setImgUrl] = useState<string | null>(null);
+  useEffect(() => {
+    console.log('Vai buscar imagem para', catKey, electronic.id);
+    const imageEndpointMap: Record<string, string> = {
+      teclados: "teclado",
+      hds: "hd",
+      fontesDeAlimentacao: "fonteDeAlimentacao",
+      gabinetes: "gabinete",
+      monitores: "monitor",
+      mouses: "mouse",
+      estabilizadores: "estabilizado",
+      impressoras: "impressora",
+      placasMae: "placaMae",
+      notebooks: "notebook",
+      processadores: "processador",
+    };
+    const endpoint = imageEndpointMap[catKey];
+    if (!endpoint) return;
+    let mounted = true;
+    const url = `http://localhost:3456/imagens/${endpoint}/${electronic.id}`;
+    console.log('Fetch disparado para:', url);
+    fetch(url)
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (!mounted) return;
+        let caminho = null;
+        if (Array.isArray(data) && data.length > 0) {
+          caminho = data[0].url || data[0].caminho;
+        } else if (data && (data.url || data.caminho)) {
+          caminho = data.url || data.caminho;
+        }
+        if (caminho) {
+          if (!caminho.startsWith('/')) caminho = '/' + caminho;
+          setImgUrl(`http://localhost:3456${caminho}`);
+        } else {
+          setImgUrl(null);
+        }
+      })
+      .catch(() => setImgUrl(null));
+    return () => { mounted = false; };
+  }, [catKey, electronic.id]);
+  return (
+    <li className="mb-1 flex items-center gap-3">
+      <img src={imgUrl || "/placeholder.svg"} alt={electronic.nome || electronic.name || `ID ${electronic.id}`} className="w-12 h-12 object-cover rounded border" />
+      <div>
+        <span className="font-medium">{electronic.nome || electronic.name || `ID ${electronic.id}`}</span>
+        {electronic.modelo && <span className="ml-2 text-gray-500">Modelo: {electronic.modelo}</span>}
+        {electronic.marca && <span className="ml-2 text-gray-500">Marca: {electronic.marca}</span>}
+        {electronic.serialNumber && <span className="ml-2 text-gray-500">S/N: {electronic.serialNumber}</span>}
+      </div>
+    </li>
+  );
+}
+
+function ProjectDonationDetailModal({ isOpen, onClose, donationId }: { isOpen: boolean, onClose: () => void, donationId?: number }) {
+  const [details, setDetails] = useState<any | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [electronics, setElectronics] = useState<any[]>([]);
+  const [isElectronicsModalOpen, setIsElectronicsModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen || !donationId) return;
+    setLoading(true);
+    // Buscar detalhes da doação
+    fetch(`http://localhost:3456/doacoes/${donationId}`)
+      .then(res => res.json())
+      .then(data => setDetails(data))
+      .catch(() => setDetails(null));
+    // Buscar eletrônicos de todas as categorias
+    const endpoints = [
+      { key: "teclados", url: "teclados", label: "Teclados" },
+      { key: "hds", url: "hds", label: "HDs" },
+      { key: "estabilizadores", url: "estabilizadores", label: "Estabilizadores" },
+      { key: "monitores", url: "monitores", label: "Monitores" },
+      { key: "mouses", url: "mouses", label: "Mouses" },
+      { key: "gabinetes", url: "gabinetes", label: "Gabinetes" },
+      { key: "impressoras", url: "impressoras", label: "Impressoras" },
+      { key: "placasMae", url: "placas-mae", label: "Placas Mãe" },
+      { key: "notebooks", url: "notebooks", label: "Notebooks" },
+      { key: "processadores", url: "processadores", label: "Processadores" },
+      { key: "fontes", url: "fontes", label: "Fontes de Alimentação" },
+    ];
+    Promise.all(
+      endpoints.map(async (ep) => {
+        const res = await fetch(`http://localhost:3456/doacoes/${donationId}/${ep.url}`);
+        if (!res.ok) return { key: ep.key, label: ep.label, items: [] };
+        const data = await res.json();
+        return { key: ep.key, label: ep.label, items: Array.isArray(data) ? data.map(item => ({ ...item, tipoCategoria: ep.key })) : [] };
+      })
+    ).then((all) => setElectronics(all));
+    setLoading(false);
+  }, [isOpen, donationId]);
+
+  // Verifica se há algum eletrônico em qualquer categoria
+  const hasAnyElectronics = electronics.some(cat => cat.items && cat.items.length > 0);
+
+  // Função para buscar imagem de um eletrônico
+  const getElectronicImage = async (catKey: string, id: number) => {
+    const imageEndpointMap: Record<string, string> = {
+      teclados: "teclado",
+      hds: "hd",
+      fontes: "fonteDeAlimentacao",
+      gabinetes: "gabinete",
+      monitores: "monitor",
+      mouses: "mouse",
+      estabilizadores: "estabilizado",
+      impressoras: "impressora",
+      placasMae: "placaMae",
+      notebooks: "notebook",
+      processadores: "processador",
+    };
+    const endpoint = imageEndpointMap[catKey];
+    if (!endpoint) return null;
+    try {
+      const res = await fetch(`http://localhost:3456/imagens/${endpoint}/${id}`);
+      if (!res.ok) return null;
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        const caminho = data[0].url || data[0].caminho;
+        if (caminho) return `http://localhost:3456${caminho.startsWith('/') ? caminho : '/' + caminho}`;
+      }
+      if (data && (data.url || data.caminho)) {
+        const caminho = data.url || data.caminho;
+        return `http://localhost:3456${caminho.startsWith('/') ? caminho : '/' + caminho}`;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Detalhes da Doação de Projeto</DialogTitle>
+        </DialogHeader>
+        {loading || !details ? (
+          <div>Carregando...</div>
+        ) : (
+          <div className="space-y-4">
+            <div><strong>Nome:</strong> {details.name}</div>
+            <div><strong>Descrição:</strong> {details.descricao}</div>
+            <div><strong>Data:</strong> {details.data ? new Date(details.data.split('T')[0]).toLocaleDateString() : "-"}</div>
+            <div><strong>Código de Referência:</strong> {details.codigoDeReferencias}</div>
+            <div><strong>Status:</strong> {details.status}</div>
+            <div><strong>Justificativa:</strong> {details.justificativa}</div>
+            <div><strong>Contato:</strong> {details.contato}</div>
+            {/* Forçar o botão aparecer sempre */}
+            <div className="mt-4 flex justify-end">
+              <button
+                className="px-3 py-1 rounded bg-blue-600 text-white hover:bg-blue-700"
+                onClick={() => setIsElectronicsModalOpen(true)}
+              >
+                Ver Eletrônicos
+              </button>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+      {/* Modal de Eletrônicos */}
+      <Dialog open={isElectronicsModalOpen} onOpenChange={setIsElectronicsModalOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Eletrônicos da Doação</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+            {electronics.filter(cat => cat.items.length > 0).length === 0 ? (
+              <div style={{color: 'red'}}>Nenhum eletrônico associado a esta doação.</div>
+            ) : (
+              electronics.filter(cat => cat.items.length > 0).map(cat => (
+                <div key={cat.label}>
+                  <div className="font-semibold mb-1">{cat.label}:</div>
+                  <ul className="list-disc ml-6">
+                    {cat.items.map((e: any) => (
+                      <ProjectDonationElectronicWithImage key={e.id} catKey={cat.key} electronic={e} getElectronicImage={getElectronicImage} />
+                    ))}
+                  </ul>
+                </div>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </Dialog>
+  );
+}
+
+function ProjectDonationElectronicWithImage({ catKey, electronic, getElectronicImage }: { catKey: string, electronic: any, getElectronicImage: (catKey: string, id: number) => Promise<string | null> }) {
+  const [imgUrl, setImgUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let mounted = true;
+    getElectronicImage(catKey, electronic.id).then(url => { if (mounted) setImgUrl(url); });
+    return () => { mounted = false; };
+  }, [catKey, electronic.id]);
+  return (
+    <li className="mb-1 flex items-center gap-3">
+      <img src={imgUrl || "/placeholder.svg"} alt={electronic.nome || electronic.name || `ID ${electronic.id}`} className="w-12 h-12 object-cover rounded border" />
+      <div>
+        <span className="font-medium">{electronic.nome || electronic.name || `ID ${electronic.id}`}</span>
+        {electronic.modelo && <span className="ml-2 text-gray-500">Modelo: {electronic.modelo}</span>}
+        {electronic.marca && <span className="ml-2 text-gray-500">Marca: {electronic.marca}</span>}
+        {electronic.serialNumber && <span className="ml-2 text-gray-500">S/N: {electronic.serialNumber}</span>}
+      </div>
+    </li>
+  );
 }
 

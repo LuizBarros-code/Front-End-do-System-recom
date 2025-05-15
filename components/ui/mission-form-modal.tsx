@@ -48,36 +48,33 @@ export function MissionFormModal({ isOpen, onClose, missionId }: MissionFormModa
     if (isOpen) {
       setLoading(true)
 
-      // Carregar lista de estudantes
-      const mockStudents: StudentOption[] = [
-        { id: 1, name: "João Silva" },
-        { id: 2, name: "Maria Santos" },
-        { id: 3, name: "Pedro Oliveira" },
-        { id: 4, name: "Ana Costa" },
-        { id: 5, name: "Carlos Souza" },
-      ]
-      setStudents(mockStudents)
+      // Buscar alunos reais apenas para nova missão
+      if (!missionId) {
+        fetch('http://localhost:3456/alunos')
+          .then(res => res.json())
+          .then(alunos => {
+            setStudents(alunos.map((a: any) => ({ id: a.id, name: a.name })));
+            setLoading(false);
+          })
+          .catch(() => setLoading(false));
+      }
 
       // Se for edição, carregar dados da missão
       if (missionId) {
-        // Simulação de carregamento de dados
-        setTimeout(() => {
-          const mockMission: MissionDetails = {
-            id: missionId,
-            title: ["Reparo de Monitores", "Catalogação de Doações", "Manutenção de Notebooks"][missionId % 3],
-            description: [
-              "Realizar diagnóstico e reparo em 5 monitores LCD com problemas de imagem.",
-              "Catalogar e registrar no sistema 20 novos itens recebidos na última campanha de doação.",
-              "Realizar limpeza e manutenção preventiva em 10 notebooks do laboratório.",
-            ][missionId % 3],
-            assignedTo: (missionId % 5) + 1,
-            deadline: new Date(2023, 2, 20 + missionId * 5).toISOString().split("T")[0],
-            status: ["PENDING", "IN_PROGRESS", "APPROVED"][missionId % 3],
-          }
-
-          setFormData(mockMission)
-          setLoading(false)
-        }, 1000)
+        fetch(`http://localhost:3456/missoes/${missionId}`)
+          .then(res => res.json())
+          .then(missao => {
+            setFormData({
+              id: missao.id,
+              title: missao.titulo,
+              description: missao.descricao,
+              assignedTo: missao.usuarioId,
+              deadline: missao.dataLimite ? missao.dataLimite.split('T')[0] : '',
+              status: missao.status ? missao.status.toUpperCase() : 'PENDING',
+            });
+            setLoading(false);
+          })
+          .catch(() => setLoading(false));
       } else {
         // Nova missão, apenas inicializar o formulário
         setLoading(false)
@@ -143,18 +140,53 @@ export function MissionFormModal({ isOpen, onClose, missionId }: MissionFormModa
     return Object.keys(errors).length === 0
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!validateForm()) {
       return
     }
 
-    // Simulação de envio de dados
-    console.log("Enviando dados da missão:", formData)
-
-    // Fecha o modal após um breve delay para simular o envio
-    setTimeout(() => {
-      onClose()
-    }, 1000)
+    try {
+      // Montar dataLimite no formato correto: 'YYYY-MM-DDT23:59:59.000Z'
+      const deadlineISO = new Date(formData.deadline + 'T23:59:59.000Z').toISOString();
+      if (missionId) {
+        // Edição: PUT para /missoes/:id
+        const response = await fetch(`http://localhost:3456/missoes/${missionId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            titulo: formData.title,
+            descricao: formData.description,
+            dataLimite: deadlineISO,
+            status: formData.status,
+          }),
+        });
+        if (!response.ok) {
+          const errorText = await response.text();
+          alert('Erro ao atualizar missão: ' + errorText);
+          return;
+        }
+      } else {
+        // Criação: POST para /missoes
+        const response = await fetch('http://localhost:3456/missoes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            titulo: formData.title,
+            descricao: formData.description,
+            dataLimite: deadlineISO,
+            usuarioId: Number(formData.assignedTo),
+          }),
+        });
+        if (!response.ok) {
+          const errorText = await response.text();
+          alert('Erro ao criar missão: ' + errorText);
+          return;
+        }
+      }
+      onClose();
+    } catch (error) {
+      alert('Erro ao salvar missão: ' + (error instanceof Error ? error.message : 'Erro desconhecido'));
+    }
   }
 
   return (
@@ -213,31 +245,33 @@ export function MissionFormModal({ isOpen, onClose, missionId }: MissionFormModa
                 )}
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="assignedTo">
-                  Aluno Designado <span className="text-red-500">*</span>
-                </Label>
-                <Select
-                  value={formData.assignedTo.toString()}
-                  onValueChange={(value) => handleSelectChange("assignedTo", value)}
-                >
-                  <SelectTrigger className={formErrors.assignedTo ? "border-red-500" : ""}>
-                    <SelectValue placeholder="Selecione um aluno" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {students.map((student) => (
-                      <SelectItem key={student.id} value={student.id.toString()}>
-                        {student.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                  {formErrors.assignedTo && (
-                    <p className="text-xs text-red-500 flex items-center gap-1 mt-1">
-                      <AlertTriangle className="h-3 w-3" /> {formErrors.assignedTo}
-                    </p>
-                  )}
-                </Select>
-              </div>
+              {!missionId && (
+                <div className="space-y-2">
+                  <Label htmlFor="assignedTo">
+                    Aluno Designado <span className="text-red-500">*</span>
+                  </Label>
+                  <Select
+                    value={formData.assignedTo.toString()}
+                    onValueChange={(value) => handleSelectChange("assignedTo", value)}
+                  >
+                    <SelectTrigger className={formErrors.assignedTo ? "border-red-500" : ""}>
+                      <SelectValue placeholder="Selecione um aluno" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {students.map((student) => (
+                        <SelectItem key={student.id} value={student.id.toString()}>
+                          {student.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                    {formErrors.assignedTo && (
+                      <p className="text-xs text-red-500 flex items-center gap-1 mt-1">
+                        <AlertTriangle className="h-3 w-3" /> {formErrors.assignedTo}
+                      </p>
+                    )}
+                  </Select>
+                </div>
+              )}
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">

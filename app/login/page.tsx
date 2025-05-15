@@ -25,7 +25,8 @@ export default function LoginPage() {
   const [formErrors, setFormErrors] = useState<{
     email?: string
     enrollment?: string
-    username?: string
+    cpf?: string
+    cnpj?: string
     password?: string
   }>({})
   const router = useRouter()
@@ -35,22 +36,32 @@ export default function LoginPage() {
     const newErrors: {
       email?: string
       enrollment?: string
-      username?: string
+      cpf?: string
+      cnpj?: string
       password?: string
     } = {}
     let isValid = true
 
-    if (userType === "PHYSICAL" || userType === "LEGAL") {
-      const email = formData.get("email") as string
-      if (!email) {
-        newErrors.email = "O email é obrigatório"
+    if (userType === "PHYSICAL") {
+      const cpf = formData.get("cpf") as string
+      if (!cpf) {
+        newErrors.cpf = "O CPF é obrigatório"
         isValid = false
-      } else if (!/\S+@\S+\.\S+/.test(email)) {
-        newErrors.email = "Email inválido"
+      } else if (!/^\d{11}$/.test(cpf.replace(/\D/g, ""))) {
+        newErrors.cpf = "CPF inválido"
         isValid = false
       }
     }
-
+    if (userType === "LEGAL") {
+      const cnpj = formData.get("cnpj") as string
+      if (!cnpj) {
+        newErrors.cnpj = "O CNPJ é obrigatório"
+        isValid = false
+      } else if (!/^\d{14}$/.test(cnpj.replace(/\D/g, ""))) {
+        newErrors.cnpj = "CNPJ inválido"
+        isValid = false
+      }
+    }
     if (userType === "STUDENT") {
       const enrollment = formData.get("enrollment") as string
       if (!enrollment) {
@@ -61,7 +72,6 @@ export default function LoginPage() {
         isValid = false
       }
     }
-
     if (userType === "ADMIN") {
       const email = formData.get("email") as string
       if (!email) {
@@ -72,7 +82,6 @@ export default function LoginPage() {
         isValid = false
       }
     }
-
     const password = formData.get("password") as string
     if (!password) {
       newErrors.password = "A senha é obrigatória"
@@ -81,7 +90,6 @@ export default function LoginPage() {
       newErrors.password = "A senha deve ter pelo menos 6 caracteres"
       isValid = false
     }
-
     setFormErrors(newErrors)
     return isValid
   }
@@ -89,28 +97,22 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setError(null)
-
     const formData = new FormData(e.currentTarget)
-
     // Validar o formulário antes de enviar
     if (!validateForm(formData)) {
       return
     }
-
     setIsLoading(true)
-
     try {
-      const email = formData.get("email") as string
+      const cpf = formData.get("cpf") as string
+      const cnpj = formData.get("cnpj") as string
       const matricula = formData.get("enrollment") as string
-      const username = formData.get("username") as string
+      const email = formData.get("email") as string
       const password = formData.get("password") as string
-
       // Special case for admin login
       if (userType === "ADMIN") {
         try {
           console.log("Attempting admin login with:", { email, password })
-          console.log("API URL:", `${API_URL}/coordenadores/verify`)
-
           const response = await fetch(`${API_URL}/coordenadores/verify`, {
             method: "POST",
             headers: {
@@ -118,86 +120,116 @@ export default function LoginPage() {
             },
             body: JSON.stringify({ email, password }),
           })
-
           console.log("Admin login response status:", response.status)
-
+          let data = null;
+          try {
+            data = await response.json();
+            console.log("Admin login response JSON:", data);
+          } catch (jsonErr) {
+            console.error("Erro ao fazer parse do JSON da resposta:", jsonErr);
+          }
           if (response.ok) {
-            const data = await response.json()
-            console.log("Login response:", data)
-
-            // Check if we have coordinator data in the response
-            const coordenador = data.coordenador
-
+            const coordenador = data && data.coordenador;
             if (coordenador && coordenador.id) {
-              // Save coordinator data in localStorage
-              localStorage.setItem("userType", "coordinator")
-              localStorage.setItem("coordinatorId", coordenador.id.toString())
-              localStorage.setItem("coordinatorEmail", email)
-              localStorage.setItem("coordinatorName", coordenador.name || "")
-
-              console.log("Coordinator ID saved:", coordenador.id)
-              console.log("Redirecting to admin page...")
-
-              // Redirect to admin page
-              router.push("/admin")
+              localStorage.setItem("userType", "ADMIN");
+              localStorage.setItem("userId", coordenador.id.toString());
+              localStorage.setItem("coordinatorEmail", email);
+              localStorage.setItem("coordinatorName", coordenador.name || "");
+              console.log("Login admin bem-sucedido, redirecionando para /admin");
+              router.push("/admin");
             } else {
-              console.error("No coordinator data found in response:", data)
-              setError("Falha na autenticação. Dados do coordenador não encontrados.")
-              setIsLoading(false)
+              console.error("Dados do coordenador não encontrados na resposta:", data);
+              setError("Falha na autenticação. Dados do coordenador não encontrados.");
             }
           } else {
-            // Handle error response
-            const errorData = await response.json()
-            console.error("Login failed:", errorData)
-            setError(errorData.message || "Credenciais inválidas")
-            setIsLoading(false)
+            let errorMessage = "Credenciais inválidas";
+            if (data && data.message) errorMessage = data.message;
+            if (response.status === 404) {
+              errorMessage = "Email não encontrado. Verifique e tente novamente.";
+            } else if (response.status === 401) {
+              errorMessage = "Senha incorreta. Verifique e tente novamente.";
+            } else if (response.status === 403) {
+              errorMessage = "Acesso negado. Sua conta pode estar bloqueada.";
+            } else if (response.status >= 500) {
+              errorMessage = "Erro no servidor. Tente novamente mais tarde.";
+            }
+            console.error("Erro no login admin:", errorMessage, data);
+            setError(errorMessage);
           }
+          setIsLoading(false);
+          return;
         } catch (error) {
-          console.error("Erro ao fazer login como administrador:", error)
-          throw error
+          console.error("Erro ao fazer login como administrador:", error);
+          setError("Erro inesperado ao tentar logar como administrador.");
+          setIsLoading(false);
+          return;
         }
       }
-
       let endpoint = ""
-
-      switch (userType) {
-        case "PHYSICAL":
-          endpoint = `/pessoasFisicas/verify/${email}/${password}`
-          break
-        case "LEGAL":
-          endpoint = `/pessoasJuridicas/verify/${email}/${password}`
-          break
-        case "STUDENT":
-          endpoint = `/alunos/verify`
-          break
-      }
-
-      const response = await fetch(`${API_URL}${endpoint}`, {
-        method: userType === "STUDENT" ? "POST" : "GET",
+      let fetchOptions: RequestInit = {
         headers: {
           "Content-Type": "application/json",
         },
-        body: userType === "STUDENT" ? JSON.stringify({ matricula, password }) : undefined,
-      })
-
+      }
+      switch (userType) {
+        case "PHYSICAL":
+          endpoint = `/pessoasFisicas/verify`
+          fetchOptions = {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ cpf: cpf.replace(/\D/g, ""), password }),
+          }
+          break
+        case "LEGAL":
+          endpoint = `/pessoasJuridicas/verify`
+          fetchOptions = {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ cnpj: cnpj.replace(/\D/g, ""), password }),
+          }
+          break
+        case "STUDENT":
+          endpoint = `/alunos/verify`
+          fetchOptions = {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ matricula, password }),
+          }
+          break
+      }
+      const response = await fetch(`${API_URL}${endpoint}`, fetchOptions)
       if (response.ok) {
         const data = await response.json()
-
         if (userType === "STUDENT") {
           localStorage.setItem("userMatricula", matricula)
-        } else {
-          localStorage.setItem("userEmail", email)
+        } else if (userType === "PHYSICAL") {
+          localStorage.setItem("userCpf", cpf.replace(/\D/g, ""))
+          localStorage.setItem("userPassword", password)
+          // Salvar id, tipo e name do usuário
+          if (data && data.pessoaFisica) {
+            localStorage.setItem("userId", String(data.pessoaFisica.id))
+            localStorage.setItem("userTipo", data.pessoaFisica.tipo)
+            localStorage.setItem("userName", data.pessoaFisica.name)
+          }
+        } else if (userType === "LEGAL") {
+          localStorage.setItem("userCnpj", cnpj)
+          // Salvar id, tipo e name do usuário jurídico
+          if (data && data.pessoaJuridica) {
+            localStorage.setItem("userId", String(data.pessoaJuridica.id))
+            localStorage.setItem("userTipo", data.pessoaJuridica.tipo)
+            localStorage.setItem("userName", data.pessoaJuridica.name)
+          }
         }
         localStorage.setItem("userType", userType)
-
         toast({
           title: "Login realizado com sucesso",
           description: "Redirecionando...",
         })
-
         // Redirect based on user type
         if (userType === "STUDENT") {
           router.push("/student")
+        } else if (userType === "PHYSICAL") {
+          router.push("/dashboard")
         } else {
           router.push("/dashboard")
         }
@@ -317,25 +349,29 @@ export default function LoginPage() {
             <TabsContent value="PHYSICAL">
               <form onSubmit={handleSubmit} className="space-y-4 mt-4">
                 <div className="space-y-2">
-                  <Label htmlFor="email" className="text-white">
-                    Email
+                  <Label htmlFor="cpf" className="text-white">
+                    CPF
                   </Label>
                   <Input
-                    id="email"
-                    name="email"
-                    type="email"
-                    required
-                    disabled={isLoading}
-                    className={`bg-[#141922]/80 border-gray-700 text-white focus:border-[#84e100] focus:ring-[#84e100]/20 ${
-                      formErrors.email ? "border-red-500 focus:border-red-500 focus:ring-red-500/20" : ""
-                    }`}
-                    onChange={() => {
-                      if (formErrors.email) {
-                        setFormErrors({ ...formErrors, email: undefined })
-                      }
+                    id="cpf"
+                    name="cpf"
+                    placeholder="Digite seu CPF"
+                    maxLength={14}
+                    onChange={e => {
+                      // Máscara simples de CPF
+                      let value = e.target.value.replace(/\D/g, "");
+                      value = value.replace(/(\d{3})(\d)/, "$1.$2");
+                      value = value.replace(/(\d{3})(\d)/, "$1.$2");
+                      value = value.replace(/(\d{3})(\d{1,2})$/, "$1-$2");
+                      e.target.value = value;
                     }}
+                    required
+                    autoComplete="cpf"
+                    className={`bg-[#141922]/80 border-gray-700 text-white focus:border-[#84e100] focus:ring-[#84e100]/20 ${
+                      formErrors.cpf ? "border-red-500 focus:border-red-500 focus:ring-red-500/20" : ""
+                    }`}
                   />
-                  {formErrors.email && <p className="text-red-400 text-sm mt-1">{formErrors.email}</p>}
+                  {formErrors.cpf && <p className="text-red-400 text-sm mt-1">{formErrors.cpf}</p>}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="password" className="text-white">
@@ -384,25 +420,30 @@ export default function LoginPage() {
             <TabsContent value="LEGAL">
               <form onSubmit={handleSubmit} className="space-y-4 mt-4">
                 <div className="space-y-2">
-                  <Label htmlFor="email" className="text-white">
-                    Email
+                  <Label htmlFor="cnpj" className="text-white">
+                    CNPJ
                   </Label>
                   <Input
-                    id="email"
-                    name="email"
-                    type="email"
-                    required
-                    disabled={isLoading}
-                    className={`bg-[#141922]/80 border-gray-700 text-white focus:border-[#84e100] focus:ring-[#84e100]/20 ${
-                      formErrors.email ? "border-red-500 focus:border-red-500 focus:ring-red-500/20" : ""
-                    }`}
-                    onChange={() => {
-                      if (formErrors.email) {
-                        setFormErrors({ ...formErrors, email: undefined })
-                      }
+                    id="cnpj"
+                    name="cnpj"
+                    placeholder="Digite seu CNPJ"
+                    maxLength={18}
+                    onChange={e => {
+                      // Máscara simples de CNPJ
+                      let value = e.target.value.replace(/\D/g, "");
+                      value = value.replace(/(\d{2})(\d)/, "$1.$2");
+                      value = value.replace(/(\d{3})(\d)/, "$1.$2");
+                      value = value.replace(/(\d{3})(\d)/, "$1/$2");
+                      value = value.replace(/(\d{4})(\d{1,2})$/, "$1-$2");
+                      e.target.value = value;
                     }}
+                    required
+                    autoComplete="cnpj"
+                    className={`bg-[#141922]/80 border-gray-700 text-white focus:border-[#84e100] focus:ring-[#84e100]/20 ${
+                      formErrors.cnpj ? "border-red-500 focus:border-red-500 focus:ring-red-500/20" : ""
+                    }`}
                   />
-                  {formErrors.email && <p className="text-red-400 text-sm mt-1">{formErrors.email}</p>}
+                  {formErrors.cnpj && <p className="text-red-400 text-sm mt-1">{formErrors.cnpj}</p>}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="password" className="text-white">

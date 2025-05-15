@@ -42,93 +42,52 @@ export function DetailModal({ isOpen, onClose, itemId, itemType, electronicType 
   const [details, setDetails] = useState<ItemDetails | null>(null)
   const [feedback, setFeedback] = useState("")
   const [newStatus, setNewStatus] = useState("")
+  const [dataParaPegar, setDataParaPegar] = useState("")
+  const [horarioParaPegar, setHorarioParaPegar] = useState("")
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState("")
 
   useEffect(() => {
-    if (isOpen && itemId) {
+    if (isOpen && itemId && itemType === "request") {
       setLoading(true)
-      // Simulação de carregamento de dados
-      setTimeout(() => {
-        // Dados simulados com base no tipo de item
-        let mockDetails: ItemDetails = {
-          id: itemId,
-          status: "PENDING",
-        }
-
-        switch (itemType) {
-          case "project":
-            mockDetails = {
-              ...mockDetails,
-              name: "Doação para Projeto Educacional",
-              description: "Doação de equipamentos para laboratório de informática em escola pública",
-              date: "2023-05-15",
-              contact: "contato@empresa.com | (11) 98765-4321",
-              requester: "Escola Municipal São José",
-              items: "5 computadores desktop, 2 impressoras, 10 teclados e mouses",
-              additionalInfo:
-                "Equipamentos serão utilizados para montar um laboratório de informática para alunos do ensino fundamental.",
-            }
-            break
-          case "user":
-            mockDetails = {
-              ...mockDetails,
-              name: "Doação de Usuário",
-              description: "Doação de laptop e periféricos",
-              date: "2023-05-10",
-              contact: "usuario@email.com | (11) 91234-5678",
-              items: "1 laptop Dell, 1 teclado, 1 mouse, 1 monitor",
-              condition: "Usado - Bom estado",
-              additionalInfo: "Equipamentos em bom estado de conservação, laptop precisa de nova bateria.",
-            }
-            break
-          case "request":
-            mockDetails = {
-              ...mockDetails,
-              name: "Solicitação de Equipamentos",
-              description: "Solicitação de computadores para ONG",
-              date: "2023-05-08",
-              contact: "ong@email.org | (11) 97654-3210",
-              requester: "ONG Educação para Todos",
-              items: "3 computadores desktop completos",
-              additionalInfo:
-                "Equipamentos serão utilizados para aulas de informática básica para jovens em situação de vulnerabilidade.",
-            }
-            break
-          case "disposal":
-            mockDetails = {
-              ...mockDetails,
-              name: "Descarte de Equipamentos",
-              description: "Lote de equipamentos obsoletos",
-              date: "2023-05-05",
-              items: "10 monitores CRT, 15 teclados antigos, 8 gabinetes",
-              quantity: 33,
-              additionalInfo: "Equipamentos sem possibilidade de recuperação, destinados à reciclagem especializada.",
-            }
-            break
-          case "electronic":
-            mockDetails = {
-              ...mockDetails,
-              name: electronicType === "notebook" ? "Notebook Dell Latitude E6440" : "Monitor LG 24 polegadas",
-              description:
-                electronicType === "notebook" ? "Notebook corporativo com processador Intel i5" : "Monitor LED Full HD",
-              serialNumber: electronicType === "notebook" ? "DL7890123" : "LG1234567",
-              model: electronicType === "notebook" ? "Latitude E6440" : "24MP55",
-              condition: electronicType === "notebook" ? "Funcional - Bateria fraca" : "Funcional - Perfeito",
-              date: "2023-04-28",
-              additionalInfo:
-                electronicType === "notebook"
-                  ? "Equipamento em bom estado, necessita apenas de nova bateria. Acompanha carregador original."
-                  : "Monitor sem riscos ou dead pixels, acompanha cabo de alimentação e cabo HDMI.",
-              status: "APPROVED",
-            }
-            break
-        }
-
-        setDetails(mockDetails)
-        setNewStatus(mockDetails.status || "PENDING")
-        setLoading(false)
-      }, 1000)
+      fetch(`http://26.99.103.209:3456/solicitacoes/${itemId}`)
+        .then(async (res) => {
+          if (!res.ok) throw new Error("Erro ao buscar detalhes da solicitação")
+          const data = await res.json()
+          setDetails(data)
+          setNewStatus(data.status || "pendente")
+          setDataParaPegar(data.dataparapegar ? data.dataparapegar.split("T")[0] : "")
+          setHorarioParaPegar(data.horarioparapegar || "")
+        })
+        .catch(() => setDetails(null))
+        .finally(() => setLoading(false))
     }
-  }, [isOpen, itemId, itemType, electronicType])
+  }, [isOpen, itemId, itemType])
+
+  const handleSave = async () => {
+    if (!details) return
+    setSaving(true)
+    setError("")
+    try {
+      const payload = {
+        ...details,
+        status: newStatus,
+        dataparapegar: dataParaPegar || null,
+        horarioparapegar: horarioParaPegar || null,
+      }
+      const res = await fetch(`http://26.99.103.209:3456/solicitacoes/${details.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+      if (!res.ok) throw new Error("Erro ao salvar alterações")
+      onClose()
+    } catch (e: any) {
+      setError(e.message || "Erro ao salvar alterações")
+    } finally {
+      setSaving(false)
+    }
+  }
 
   const getStatusBadge = (status: string) => {
     const variants = {
@@ -171,6 +130,71 @@ export function DetailModal({ isOpen, onClose, itemId, itemType, electronicType 
           <div className="text-sm text-muted-foreground">{value}</div>
         </div>
       </div>
+    )
+  }
+
+  if (itemType === "request") {
+    return (
+      <Dialog open={isOpen} onOpenChange={onClose}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Detalhes da Solicitação</DialogTitle>
+            <DialogDescription>ID: #{details?.id}</DialogDescription>
+          </DialogHeader>
+          {loading ? (
+            <div className="py-8 text-center">Carregando detalhes...</div>
+          ) : details ? (
+            <div className="space-y-4 mt-2">
+              <div><strong>Nome:</strong> {details.name}</div>
+              <div><strong>Eletrônicos:</strong> {details.eletronicos}</div>
+              <div><strong>Descrição:</strong> {details.descricao}</div>
+              <div><strong>Informações:</strong> {details.informacoes}</div>
+              <div><strong>Contato:</strong> {details.contato}</div>
+              <div><strong>Status:</strong> 
+                <Select value={newStatus} onValueChange={setNewStatus}>
+                  <SelectTrigger className="w-40">
+                    <SelectValue placeholder="Selecione um status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pendente">Pendente</SelectItem>
+                    <SelectItem value="aprovado">Aprovado</SelectItem>
+                    <SelectItem value="rejeitado">Rejeitado</SelectItem>
+                    <SelectItem value="em_andamento">Em Andamento</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex gap-4">
+                <div className="flex-1">
+                  <Label>Data para pegar</Label>
+                  <input
+                    type="date"
+                    className="border rounded px-2 py-1 w-full"
+                    value={dataParaPegar || ""}
+                    onChange={e => setDataParaPegar(e.target.value)}
+                  />
+                </div>
+                <div className="flex-1">
+                  <Label>Horário para pegar</Label>
+                  <input
+                    type="time"
+                    className="border rounded px-2 py-1 w-full"
+                    value={horarioParaPegar || ""}
+                    onChange={e => setHorarioParaPegar(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div><strong>Criado em:</strong> {details.createdAt ? new Date(details.createdAt).toLocaleDateString() : "-"}</div>
+              {error && <div className="text-red-600 text-sm">{error}</div>}
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button>
+                <Button onClick={handleSave} disabled={saving}>{saving ? "Salvando..." : "Salvar Alterações"}</Button>
+              </div>
+            </div>
+          ) : (
+            <div className="py-8 text-center">Nenhum detalhe encontrado para esta solicitação.</div>
+          )}
+        </DialogContent>
+      </Dialog>
     )
   }
 
@@ -248,17 +272,6 @@ export function DetailModal({ isOpen, onClose, itemId, itemType, electronicType 
                     <SelectItem value="IN_PROGRESS">Em Andamento</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
-
-              <div>
-                <Label htmlFor="feedback">Feedback / Observações</Label>
-                <Textarea
-                  id="feedback"
-                  placeholder="Adicione um feedback ou observações sobre este item"
-                  value={feedback}
-                  onChange={(e) => setFeedback(e.target.value)}
-                  rows={3}
-                />
               </div>
 
               <div className="flex justify-end gap-2">

@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { CalendarIcon, Clock, Package, Truck, CheckCircle, ArrowLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
+import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import {
   Dialog,
@@ -22,10 +22,11 @@ interface Donation {
   eletronicos: string
   status: string
   createdAt: string
-  descricao: string
-  informacoesAdicionais: string
-  horarioDeEntrega: string
-  contato: string
+  descricao?: string
+  informacoesAdicionais?: string
+  horarioDeEntrega?: string
+  contato?: string
+  data?: string
 }
 
 interface UserData {
@@ -49,104 +50,41 @@ export default function MinhasDoacoesPage() {
   const [userData, setUserData] = useState<UserData | null>(null)
   const [userType, setUserType] = useState<"pessoaFisicas" | "pessoaJuridicas" | null>(null)
 
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://26.99.103.209:3456"
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3456"
 
   useEffect(() => {
-    const checkAuth = async () => {
+    const fetchDonations = async () => {
+      const userId = typeof window !== 'undefined' ? localStorage.getItem('userId') : null;
+      const userType = typeof window !== 'undefined' ? localStorage.getItem('userTipo') : null;
+      if (!userId || !userType) {
+        router.push("/login");
+        return;
+      }
       try {
-        const email = localStorage.getItem("userEmail")
-        const storedUserType = localStorage.getItem("userType")
-
-        if (!email || !storedUserType) {
-          router.push("/login")
-          return
-        }
-
-        let endpoint = ""
-        if (storedUserType === "PHYSICAL") {
-          endpoint = `/pessoaFisicas/email/${email}`
-          setUserType("pessoaFisicas")
-        } else if (storedUserType === "LEGAL") {
-          endpoint = `/pessoaJuridicas/email/${email}`
-          setUserType("pessoaJuridicas")
-        } else {
-          throw new Error("Invalid user type")
-        }
-
-        const response = await fetch(`${API_URL}${endpoint}`)
-
-        if (response.status === 404) {
-          throw new Error("User not found")
-        }
-
-        if (!response.ok) {
-          throw new Error("Failed to fetch user data")
-        }
-
-        const data = await response.json()
-        setUserData(data)
-        fetchDonations(data.id, storedUserType === "PHYSICAL" ? "fisico" : "juridico")
-      } catch (error) {
-        console.error("Authentication error:", error)
-        if (error instanceof Error && error.message === "User not found") {
-          toast({
-            variant: "destructive",
-            title: "Usuário não encontrado",
-            description: "Por favor, faça login novamente.",
-          })
-        } else {
-          toast({
-            variant: "destructive",
-            title: "Erro de autenticação",
-            description: "Ocorreu um erro ao carregar seus dados. Por favor, tente novamente.",
-          })
-        }
-        localStorage.removeItem("userEmail")
-        localStorage.removeItem("userType")
-        router.push("/login")
+        const response = await fetch(`${API_URL}/doacoesUsuarios/${userId}/${userType}`);
+        if (!response.ok) throw new Error("Erro ao buscar doações");
+        let data = await response.json();
+        data = data.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        setDonations(data);
+      } catch (e) {
+        setDonations([]);
+      } finally {
+        setIsLoading(false);
       }
-    }
-
-    checkAuth()
-  }, [router, toast])
-
-  const fetchDonations = async (userId: number, type: string) => {
-    try {
-      const response = await fetch(`${API_URL}/doacoesUsuarios/${userId}/${type}`)
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch donations")
-      }
-
-      const data = await response.json()
-      setDonations(data)
-    } catch (error) {
-      console.error("Error fetching donations:", error)
-      toast({
-        variant: "destructive",
-        title: "Erro ao carregar doações",
-        description: "Não foi possível carregar suas doações. Por favor, tente novamente.",
-      })
-    } finally {
-      setIsLoading(false)
-    }
-  }
+    };
+    fetchDonations();
+  }, [router, API_URL]);
 
   const getStatusBadge = (status: string) => {
-    const variants: Record<string, { variant: "default" | "warning" | "success"; label: string; icon: any }> = {
-      pendente: { variant: "default", label: "Pendente", icon: Package },
-      em_transito: { variant: "warning", label: "Em Trânsito", icon: Truck },
-      concluido: { variant: "success", label: "Concluído", icon: CheckCircle },
-      default: { variant: "default", label: "Pendente", icon: Package },
-    }
-    const statusInfo = variants[status.toLowerCase()] || variants.default
-    return (
-      <Badge variant={statusInfo.variant} className="flex items-center gap-1">
-        <statusInfo.icon className="w-3 h-3" />
-        {statusInfo.label}
-      </Badge>
-    )
-  }
+    const variants: Record<string, { variant: "default" | "secondary" | "destructive"; label: string }> = {
+      pendente: { variant: "default", label: "Pendente" },
+      aprovado: { variant: "secondary", label: "Aprovado" },
+      rejeitado: { variant: "destructive", label: "Rejeitado" },
+      default: { variant: "default", label: "Pendente" },
+    };
+    const statusInfo = variants[status?.toLowerCase()] || variants.default;
+    return <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>;
+  };
 
   if (isLoading) {
     return (
@@ -159,94 +97,65 @@ export default function MinhasDoacoesPage() {
   return (
     <div className="container mx-auto py-8 space-y-8">
       <div className="flex items-center justify-between mb-8">
-        <h1 className="text-3xl font-bold">Minhas Doações</h1>
-        <Button onClick={() => router.back()}>
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Voltar
-        </Button>
+        <div className="flex items-center gap-4">
+          <h1 className="text-3xl font-bold">Minhas Doações</h1>
+          <Button variant="secondary" onClick={() => router.push('/dashboard')}>Voltar para o Dashboard</Button>
+        </div>
+        <Button variant="outline" onClick={() => window.location.reload()}>Atualizar</Button>
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Histórico de Doações</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {donations.length === 0 ? (
-            <p className="text-center py-4">Você ainda não possui doações registradas.</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>ID</TableHead>
-                  <TableHead>Itens</TableHead>
-                  <TableHead>Data</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {donations.map((donation) => (
-                  <TableRow key={donation.id}>
-                    <TableCell>{donation.id}</TableCell>
-                    <TableCell>{donation.eletronicos}</TableCell>
-                    <TableCell>{new Date(donation.createdAt).toLocaleDateString()}</TableCell>
-                    <TableCell>{getStatusBadge(donation.status)}</TableCell>
-                    <TableCell>
-                      <Dialog>
-                        <DialogTrigger asChild>
-                          <Button variant="outline" size="sm" onClick={() => setSelectedDonation(donation)}>
-                            Detalhes
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent className="sm:max-w-[425px]">
-                          <DialogHeader>
-                            <DialogTitle>Detalhes da Doação</DialogTitle>
-                            <DialogDescription>Informações detalhadas sobre a doação #{donation.id}</DialogDescription>
-                          </DialogHeader>
-                          <div className="space-y-4">
-                            <div>
-                              <h4 className="font-semibold">Itens:</h4>
-                              <p>{selectedDonation?.eletronicos}</p>
-                            </div>
-                            <div>
-                              <h4 className="font-semibold">Descrição:</h4>
-                              <p>{selectedDonation?.descricao}</p>
-                            </div>
-                            {selectedDonation?.informacoesAdicionais && (
-                              <div>
-                                <h4 className="font-semibold">Informações Adicionais:</h4>
-                                <p>{selectedDonation.informacoesAdicionais}</p>
-                              </div>
-                            )}
-                            <div className="flex justify-between items-center">
-                              <div className="flex items-center gap-2">
-                                <CalendarIcon className="w-4 h-4" />
-                                {new Date(selectedDonation?.createdAt || "").toLocaleDateString()}
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <Clock className="w-4 h-4" />
-                                {selectedDonation?.horarioDeEntrega}
-                              </div>
-                            </div>
-                            <div>
-                              <h4 className="font-semibold">Status:</h4>
-                              {selectedDonation && getStatusBadge(selectedDonation.status)}
-                            </div>
-                            <div>
-                              <h4 className="font-semibold">Contato:</h4>
-                              <p>{selectedDonation?.contato}</p>
-                            </div>
-                          </div>
-                        </DialogContent>
-                      </Dialog>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+      {isLoading ? (
+        <div className="min-h-[200px] flex items-center justify-center">
+          <p>Carregando...</p>
+        </div>
+      ) : donations.length === 0 ? (
+        <div className="text-center py-8 text-muted-foreground">
+          <p>Você ainda não possui doações.</p>
+        </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {donations.map((item) => (
+            <Card key={item.id}>
+              <CardContent className="p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-semibold">Doação #{item.id}</h3>
+                  {getStatusBadge(item.status)}
+                </div>
+                <p className="text-sm text-muted-foreground">{item.eletronicos}</p>
+                <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                  <div className="flex items-center">
+                    <CalendarIcon className="mr-1 h-4 w-4" />
+                    {new Date(item.createdAt).toLocaleDateString()}
+                  </div>
+                </div>
+                {item.descricao && (
+                  <div>
+                    <span className="font-medium">Descrição: </span>
+                    <span>{item.descricao}</span>
+                  </div>
+                )}
+                {item.informacoesAdicionais && (
+                  <div>
+                    <span className="font-medium">Informações Adicionais: </span>
+                    <span>{item.informacoesAdicionais}</span>
+                  </div>
+                )}
+                {item.horarioDeEntrega && (
+                  <div>
+                    <span className="font-medium">Horário de Entrega: </span>
+                    <span>{item.horarioDeEntrega}</span>
+                  </div>
+                )}
+                {item.contato && (
+                  <div>
+                    <span className="font-medium">Contato: </span>
+                    <span>{item.contato}</span>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

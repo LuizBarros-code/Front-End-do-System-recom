@@ -43,114 +43,62 @@ interface WeeklyReportDetails {
 // Substitua o conteúdo do componente WeeklyReportModal
 export function WeeklyReportModal({ isOpen, onClose, reportId }: WeeklyReportModalProps) {
   const [loading, setLoading] = useState(true)
-  const [details, setDetails] = useState<WeeklyReportDetails | null>(null)
+  const [details, setDetails] = useState<any | null>(null)
+  const [student, setStudent] = useState<any | null>(null)
   const [feedback, setFeedback] = useState("")
-  const [newStatus, setNewStatus] = useState("")
+  const [aprovado, setAprovado] = useState<boolean>(false)
   const [printMode, setPrintMode] = useState(false)
 
   useEffect(() => {
     if (isOpen && reportId) {
       setLoading(true)
-      // Simulação de carregamento de dados
-      setTimeout(() => {
-        // Dados simulados do relatório
-        const mockDetails: WeeklyReportDetails = {
-          id: reportId,
-          title: [
-            "Relatório Semanal de Atividades - Semana 1",
-            "Relatório Semanal de Atividades - Semana 2",
-            "Relatório Semanal de Atividades - Semana 3",
-          ][reportId % 3],
-          studentName: ["João Silva", "Maria Santos", "Pedro Oliveira"][reportId % 3],
-          studentEmail: ["joao.silva@email.com", "maria.santos@email.com", "pedro.oliveira@email.com"][reportId % 3],
-          studentCourse: ["Engenharia da Computação", "Ciência da Computação", "Sistemas de Informação"][reportId % 3],
-          studentMatricula: ["2021001", "2021002", "2021003"][reportId % 3],
-          week: ["01/03/2023 - 07/03/2023", "08/03/2023 - 14/03/2023", "15/03/2023 - 21/03/2023"][reportId % 3],
-          content: [
-            "Realizei a triagem de 10 equipamentos e participei do workshop de reparo de monitores. Também auxiliei na catalogação de 5 novos computadores recebidos por doação. Organizei o estoque de peças e componentes.",
-            "Consertei 5 notebooks e cataloguei 15 novos itens recebidos por doação. Participei do atendimento ao público em 2 dias da semana, orientando sobre o funcionamento do projeto.",
-            "Participei da organização do estoque e catalogação de novos equipamentos. Realizei a manutenção preventiva em 8 computadores e auxiliei na preparação de 3 computadores para doação.",
-          ][reportId % 3],
-          activities: [
-            ["Triagem de equipamentos", "Participação em workshop", "Catalogação de doações", "Organização de estoque"],
-            ["Reparo de notebooks", "Catalogação de itens", "Atendimento ao público", "Orientação sobre o projeto"],
-            [
-              "Organização de estoque",
-              "Catalogação de equipamentos",
-              "Manutenção preventiva",
-              "Preparação para doação",
-            ],
-          ][reportId % 3],
-          hoursWorked: [20, 18, 22][reportId % 3],
-          submissionDate: new Date(2023, 2, 7 + reportId * 7).toISOString(),
-          status: ["PENDING", "APPROVED", "REJECTED"][reportId % 3],
-          feedback:
-            reportId % 3 === 1
-              ? "Excelente trabalho! Continue assim."
-              : reportId % 3 === 2
-                ? "Relatório incompleto. Por favor, adicione mais detalhes sobre as atividades realizadas."
-                : undefined,
-          attachments: reportId % 2 === 0 ? ["foto_equipamentos.jpg", "lista_catalogacao.pdf"] : undefined,
-          supervisor: ["Ana Carvalho", "Roberto Mendes", "Fernanda Lima"][reportId % 3],
-          goals: [
-            "Realizar a triagem de pelo menos 10 equipamentos e participar de atividades de capacitação.",
-            "Consertar notebooks com problemas de hardware e catalogar novos itens recebidos.",
-            "Organizar o estoque e realizar manutenção preventiva em computadores.",
-          ][reportId % 3],
-          challenges: [
-            "Alguns equipamentos apresentaram problemas complexos que exigiram pesquisa adicional.",
-            "Grande volume de itens para catalogação em pouco tempo.",
-            "Falta de peças específicas para completar alguns reparos.",
-          ][reportId % 3],
-          nextSteps: [
-            "Focar no reparo dos equipamentos triados e continuar a catalogação.",
-            "Finalizar a catalogação e iniciar o processo de preparação para doação.",
-            "Solicitar peças necessárias e continuar a manutenção preventiva.",
-          ][reportId % 3],
-        }
-
-        setDetails(mockDetails)
-        setNewStatus(mockDetails.status)
-        setFeedback(mockDetails.feedback || "")
-        setLoading(false)
-      }, 1000)
+      fetch(`http://localhost:3456/relatorios/${reportId}`)
+        .then(async (res) => {
+          if (!res.ok) throw new Error("Erro ao buscar relatório");
+          const data = await res.json();
+          setDetails(data);
+          setFeedback(data.feedback || "");
+          setAprovado(!!data.aprovado);
+          // Buscar dados do aluno
+          if (data.usuarioId) {
+            fetch(`http://localhost:3456/alunos/${data.usuarioId}`)
+              .then(async (resAluno) => {
+                if (!resAluno.ok) throw new Error();
+                setStudent(await resAluno.json());
+              })
+              .catch(() => setStudent(null));
+          } else {
+            setStudent(null);
+          }
+        })
+        .catch(() => { setDetails(null); setStudent(null); })
+        .finally(() => setLoading(false));
     }
-  }, [isOpen, reportId])
+  }, [isOpen, reportId]);
 
-  const getStatusBadge = (status: string) => {
-    const variants = {
-      PENDING: { variant: "default", label: "Pendente", icon: <AlertCircle className="h-4 w-4 mr-1" /> },
-      APPROVED: { variant: "success", label: "Aprovado", icon: <CheckCircle className="h-4 w-4 mr-1" /> },
-      REJECTED: { variant: "destructive", label: "Rejeitado", icon: <XCircle className="h-4 w-4 mr-1" /> },
+  const getStatusBadge = (aprovado: boolean) => {
+    return aprovado
+      ? <Badge variant="success" className="flex items-center"><CheckCircle className="h-4 w-4 mr-1" />Aprovado</Badge>
+      : <Badge variant="default" className="flex items-center"><AlertCircle className="h-4 w-4 mr-1" />Pendente</Badge>;
+  };
+
+  const handleStatusChange = async () => {
+    if (!details) return;
+    try {
+      setLoading(true);
+      await fetch(`http://localhost:3456/relatorios/${reportId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ feedback, aprovado }),
+      });
+      setDetails({ ...details, feedback, aprovado });
+      onClose();
+    } catch {
+      alert("Erro ao salvar avaliação");
+    } finally {
+      setLoading(false);
     }
-    const statusInfo = variants[status as keyof typeof variants] || variants.PENDING
-    return (
-      <Badge variant={statusInfo.variant as any} className="flex items-center">
-        {statusInfo.icon}
-        {statusInfo.label}
-      </Badge>
-    )
-  }
-
-  const handleStatusChange = () => {
-    // Simulação de atualização de status
-    console.log(`Atualizando status do relatório ${reportId} para ${newStatus}`)
-    console.log(`Feedback: ${feedback}`)
-
-    // Atualiza o status no objeto de detalhes
-    if (details) {
-      setDetails({
-        ...details,
-        status: newStatus,
-        feedback: feedback,
-      })
-    }
-
-    // Fecha o modal após um breve delay para mostrar a atualização
-    setTimeout(() => {
-      onClose()
-    }, 1000)
-  }
+  };
 
   const handlePrint = () => {
     setPrintMode(true)
@@ -160,12 +108,20 @@ export function WeeklyReportModal({ isOpen, onClose, reportId }: WeeklyReportMod
     }, 100)
   }
 
-  const handleExportPDF = () => {
-    // Simulação de exportação para PDF
-    console.log("Exportando relatório para PDF...")
-    // Em uma implementação real, aqui seria usado uma biblioteca como jsPDF ou html2pdf
-    alert("Relatório exportado como PDF com sucesso!")
-  }
+  const handleExportPDF = async () => {
+    const html2pdf = (await import("html2pdf.js")).default;
+    const element = document.getElementById("report-content");
+    if (!element) return;
+    html2pdf()
+      .set({
+        margin: 10,
+        filename: `relatorio-semanal-${details?.id || "export"}.pdf`,
+        html2canvas: { scale: 2 },
+        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+      })
+      .from(element)
+      .save();
+  };
 
   const renderDetailItem = (icon: React.ReactNode, label: string, value: string | number | undefined) => {
     if (!value) return null
@@ -185,6 +141,7 @@ export function WeeklyReportModal({ isOpen, onClose, reportId }: WeeklyReportMod
       <DialogContent
         className={`max-w-5xl max-h-[90vh] overflow-y-auto ${printMode ? "print:p-0 print:max-w-none print:max-h-none print:overflow-visible" : ""}`}
       >
+        <DialogTitle className="sr-only">Avaliação de Relatório</DialogTitle>
         {loading ? (
           <div className="py-8 text-center">Carregando detalhes do relatório...</div>
         ) : details ? (
@@ -213,24 +170,20 @@ export function WeeklyReportModal({ isOpen, onClose, reportId }: WeeklyReportMod
               <div className="bg-primary/5 border border-primary/20 rounded-lg p-6 mb-8">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                   <div>
-                    <h1 className="text-2xl font-bold text-primary">{details.title}</h1>
-                    <p className="text-muted-foreground mt-1">Período: {details.week}</p>
+                    <h1 className="text-2xl font-bold text-primary">{details?.name}</h1>
+                    <p className="text-muted-foreground mt-1">Período: {details?.periodo}</p>
                   </div>
                   <div className="flex flex-col items-end">
                     <div className="flex items-center mb-2">
                       <Calendar className="h-4 w-4 mr-2 text-muted-foreground" />
                       <span className="text-sm">
-                        Data de Envio: {new Date(details.submissionDate).toLocaleDateString()}
+                        Data de Envio: {details?.createdAt ? new Date(details.createdAt).toLocaleDateString() : "-"}
                       </span>
                     </div>
-                    <div className="print:hidden">{details.status && getStatusBadge(details.status)}</div>
+                    <div className="print:hidden">{getStatusBadge(aprovado)}</div>
                     <div className="hidden print:block text-sm">
                       Status:{" "}
-                      {details.status === "APPROVED"
-                        ? "Aprovado"
-                        : details.status === "REJECTED"
-                          ? "Rejeitado"
-                          : "Pendente"}
+                      {aprovado ? "Aprovado" : "Pendente"}
                     </div>
                   </div>
                 </div>
@@ -250,23 +203,15 @@ export function WeeklyReportModal({ isOpen, onClose, reportId }: WeeklyReportMod
                     <div className="p-4 space-y-3">
                       <div className="flex justify-between items-center pb-2 border-b">
                         <span className="font-medium">Nome:</span>
-                        <span>{details.studentName}</span>
+                        <span>{student?.name || '-'}</span>
                       </div>
                       <div className="flex justify-between items-center pb-2 border-b">
                         <span className="font-medium">Matrícula:</span>
-                        <span>{details.studentMatricula}</span>
-                      </div>
-                      <div className="flex justify-between items-center pb-2 border-b">
-                        <span className="font-medium">Curso:</span>
-                        <span>{details.studentCourse}</span>
-                      </div>
-                      <div className="flex justify-between items-center pb-2 border-b">
-                        <span className="font-medium">Supervisor:</span>
-                        <span>{details.supervisor}</span>
+                        <span>{student?.matricula || '-'}</span>
                       </div>
                       <div className="flex justify-between items-center">
-                        <span className="font-medium">Horas Trabalhadas:</span>
-                        <span className="font-semibold">{details.hoursWorked}h</span>
+                        <span className="font-medium">Bolsista:</span>
+                        <span>{student?.bolsistaTipo || '-'}</span>
                       </div>
                     </div>
                   </div>
@@ -304,7 +249,7 @@ export function WeeklyReportModal({ isOpen, onClose, reportId }: WeeklyReportMod
                         Resumo das Atividades
                       </h3>
                     </div>
-                    <div className="p-5 text-sm leading-relaxed whitespace-pre-wrap">{details.content}</div>
+                    <div className="p-5 text-sm leading-relaxed whitespace-pre-wrap">{details?.resumo}</div>
                   </div>
 
                   {details.activities && (
@@ -331,21 +276,21 @@ export function WeeklyReportModal({ isOpen, onClose, reportId }: WeeklyReportMod
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="bg-card rounded-lg border shadow-sm">
                       <div className="bg-muted px-4 py-3 rounded-t-lg border-b">
+                        <h3 className="text-base font-medium">Atividades</h3>
+                      </div>
+                      <div className="p-4 text-sm">{details?.atividades}</div>
+                    </div>
+                    <div className="bg-card rounded-lg border shadow-sm">
+                      <div className="bg-muted px-4 py-3 rounded-t-lg border-b">
                         <h3 className="text-base font-medium">Objetivos</h3>
                       </div>
-                      <div className="p-4 text-sm">{details.goals}</div>
+                      <div className="p-4 text-sm">{details?.objetivos}</div>
                     </div>
                     <div className="bg-card rounded-lg border shadow-sm">
                       <div className="bg-muted px-4 py-3 rounded-t-lg border-b">
                         <h3 className="text-base font-medium">Desafios</h3>
                       </div>
-                      <div className="p-4 text-sm">{details.challenges}</div>
-                    </div>
-                    <div className="bg-card rounded-lg border shadow-sm">
-                      <div className="bg-muted px-4 py-3 rounded-t-lg border-b">
-                        <h3 className="text-base font-medium">Próximos Passos</h3>
-                      </div>
-                      <div className="p-4 text-sm">{details.nextSteps}</div>
+                      <div className="p-4 text-sm">{details?.desafios}</div>
                     </div>
                   </div>
 
@@ -360,11 +305,9 @@ export function WeeklyReportModal({ isOpen, onClose, reportId }: WeeklyReportMod
                       <div className="p-5">
                         <div
                           className={`p-4 rounded-md text-sm border-l-4 ${
-                            details.status === "APPROVED"
+                            aprovado
                               ? "border-green-500 bg-green-50"
-                              : details.status === "REJECTED"
-                                ? "border-red-500 bg-red-50"
-                                : "border-gray-500 bg-gray-50"
+                              : "border-gray-500 bg-gray-50"
                           }`}
                         >
                           {details.feedback}
@@ -385,14 +328,13 @@ export function WeeklyReportModal({ isOpen, onClose, reportId }: WeeklyReportMod
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label className="text-sm font-medium block mb-2">Status da Avaliação</label>
-                    <Select value={newStatus} onValueChange={setNewStatus}>
+                    <Select value={aprovado ? "true" : "false"} onValueChange={v => setAprovado(v === "true")}> 
                       <SelectTrigger className="w-full">
                         <SelectValue placeholder="Selecione um status" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="PENDING">Pendente</SelectItem>
-                        <SelectItem value="APPROVED">Aprovado</SelectItem>
-                        <SelectItem value="REJECTED">Rejeitado</SelectItem>
+                        <SelectItem value="true">Aprovado</SelectItem>
+                        <SelectItem value="false">Pendente</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

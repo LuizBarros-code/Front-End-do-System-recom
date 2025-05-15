@@ -27,7 +27,32 @@ export function CreateDisposalDialog({ userId }: CreateDisposalDialogProps) {
   const { toast } = useToast()
   const [isLoading, setIsLoading] = useState(false)
   const [selectorOpen, setSelectorOpen] = useState(false)
-  const [selectedEquipment, setSelectedEquipment] = useState<any>({})
+  const [selectedEquipment, setSelectedEquipment] = useState<any>({
+    teclados: [],
+    hds: [],
+    fontesDeAlimentacao: [],
+    gabinetes: [],
+    monitores: [],
+    mouses: [],
+    estabilizadores: [],
+    impressoras: [],
+    placasmae: [],
+    notebooks: [],
+    processadores: []
+  })
+  const [allEquipment, setAllEquipment] = useState<any>({
+    teclados: [],
+    hds: [],
+    fontesDeAlimentacao: [],
+    gabinetes: [],
+    monitores: [],
+    mouses: [],
+    estabilizadores: [],
+    impressoras: [],
+    placasmae: [],
+    notebooks: [],
+    processadores: []
+  })
   const [formData, setFormData] = useState({
     name: "",
     codigoDeReferencias: "",
@@ -36,25 +61,42 @@ export function CreateDisposalDialog({ userId }: CreateDisposalDialogProps) {
     data: "",
   })
 
+  const handleEquipmentSelect = (selected: any, all: any) => {
+    setSelectedEquipment(selected);
+    setAllEquipment(all);
+  }
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setIsLoading(true)
 
     try {
+      const allCategories = [
+        "teclados", "hds", "fontesDeAlimentacao", "gabinetes", "monitores", "mouses",
+        "estabilizadores", "impressoras", "placasmae", "notebooks", "processadores"
+      ];
+
       const payload = {
-        ...formData,
+        name: formData.name,
+        codigoDeReferencias: formData.codigoDeReferencias,
+        descricao: formData.descricao,
         data: new Date(formData.data).toISOString(),
         usuarioId: Number(userId),
-        ...Object.entries(selectedEquipment).reduce(
-          (acc, [key, value]) => {
-            if (Array.isArray(value) && value.length > 0) {
-              acc[key] = value
-            }
-            return acc
-          },
-          {} as Record<string, number[]>,
-        ),
+        teclados: selectedEquipment.teclados || [],
+        hds: selectedEquipment.hds || [],
+        fontesDeAlimentacao: selectedEquipment.fontesDeAlimentacao || [],
+        gabinetes: selectedEquipment.gabinetes || [],
+        monitores: selectedEquipment.monitores || [],
+        mouses: selectedEquipment.mouses || [],
+        estabilizadores: selectedEquipment.estabilizadores || [],
+        impressoras: selectedEquipment.impressoras || [],
+        placasmae: selectedEquipment.placasMae || [],
+        notebooks: selectedEquipment.notebooks || [],
+        processadores: selectedEquipment.processadores || []
       }
+
+      console.log("IDs selecionados:", selectedEquipment);
+      console.log("Payload para criação:", payload);
 
       const response = await fetch(`${API_URL}/descartes`, {
         method: "POST",
@@ -70,24 +112,44 @@ export function CreateDisposalDialog({ userId }: CreateDisposalDialogProps) {
 
       const result = await response.json()
 
-      // Update equipment with disposal ID
+      // Atualizar status dos equipamentos para "Para descarte"
       await Promise.all(
-        Object.entries(selectedEquipment).map(async ([category, ids]) => {
+        allCategories.map(async (category) => {
+          const ids = payload[category];
           if (Array.isArray(ids) && ids.length > 0) {
             await Promise.all(
-              ids.map((id) =>
-                fetch(`${API_URL}/${category}/${id}`, {
-                  method: "PATCH",
-                  headers: {
-                    "Content-Type": "application/json",
-                  },
-                  body: JSON.stringify({ descarteId: result.id }),
-                }),
-              ),
-            )
+              ids.map(async (id) => {
+                const typeToEndpoint: Record<string, string> = {
+                  teclados: 'teclados',
+                  hds: 'hds',
+                  fontesDeAlimentacao: 'fontesDeAlimentacao',
+                  gabinetes: 'gabinetes',
+                  monitores: 'monitores',
+                  mouses: 'mouses',
+                  estabilizadores: 'estabilizadores',
+                  impressoras: 'impressoras',
+                  placasmae: 'placasMae',
+                  notebooks: 'notebooks',
+                  processadores: 'processadores',
+                };
+                const endpoint = typeToEndpoint[category];
+                if (endpoint) {
+                  await fetch(`${API_URL}/${endpoint}/${id}`, {
+                    method: 'PUT',
+                    headers: {
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                      status: "Para descarte",
+                      feedback: "Equipamento incluído em descarte"
+                    }),
+                  });
+                }
+              })
+            );
           }
-        }),
-      )
+        })
+      );
 
       toast({
         title: "Sucesso",
@@ -156,7 +218,7 @@ export function CreateDisposalDialog({ userId }: CreateDisposalDialogProps) {
           </DialogFooter>
         </form>
       </DialogContent>
-      <EquipmentSelector open={selectorOpen} onOpenChange={setSelectorOpen} onSelect={setSelectedEquipment} />
+      <EquipmentSelector open={selectorOpen} onOpenChange={setSelectorOpen} onSelect={(selected, all) => handleEquipmentSelect(selected, all)} />
     </Dialog>
   )
 }
